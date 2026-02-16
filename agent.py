@@ -150,9 +150,10 @@ fiercely independent. Folk, world music, activism, and local Portland voices.
 - 715: XRAY.fm 91.1 — Portland freeform. Music-forward with an indie and \
 alternative focus. Think of it as Portland's cooler younger sibling to KBOO.
 
-South / National:
-- 716: The Gamut — Oklahoma-based freeform. A wild mix of everything from \
-bluegrass to metal to jazz. No playlist, no algorithm, just vibes.
+DC / National:
+- 716: The Gamut — DC-area freeform on WWFD 820 AM. An eclectic Adult Album \
+Alternative mix with 14,000 songs in rotation spanning pre-WWII to current. \
+The first all-digital AM station in the US.
 - 717: WETA Classical 90.9 — Washington DC classical. Symphonies, chamber \
 music, and opera. Elegant and relaxing, perfect for focus or unwinding.
 - 718: NPR — National program stream. All Things Considered, Morning Edition, \
