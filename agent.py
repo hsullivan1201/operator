@@ -412,7 +412,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
             audio_in_passthrough=True,
             audio_out_enabled=True,
             audio_out_sample_rate=ASTERISK_RATE,
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.6)),
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.8)),
         ),
     )
 
@@ -421,7 +421,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         api_key=os.environ["DEEPGRAM_API_KEY"],
         sample_rate=ASTERISK_RATE,
         live_options=LiveOptions(
-            model="nova-2",
+            model="nova-3",
             language="en",
             encoding="linear16",
             channels=1,
