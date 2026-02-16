@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Librarian - AI book advisor (ext 202)
+Librarian - AI reference librarian with web access (ext 202)
 
 Uses Pipecat for conversation management with AudioSocket transport.
 
@@ -16,11 +16,14 @@ load_dotenv()
 
 import asyncio
 import os
+import re
 import struct
 import sys
 import time
 from typing import Optional
+from html import unescape
 
+import httpx
 from loguru import logger
 
 from pipecat.frames.frames import (
@@ -42,6 +45,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.anthropic import AnthropicLLMService
 from pipecat.services.deepgram import DeepgramSTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
+from pipecat.services.llm_service import FunctionCallParams
 from deepgram import LiveOptions
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
@@ -100,8 +104,84 @@ Keep it conversational. You're chatting, not delivering a bibliography. \
 
 If they ask a factual question, answer it directly first, then point them \
 to where they can go deeper. You're a librarian, not a search engine — \
-you add context and judgment.\
+you add context and judgment.
+
+You have access to web_search and fetch_page tools. Use web_search when the \
+caller asks about something you're not sure about, want to verify, or need \
+current information for. Use fetch_page to read a specific URL. Don't announce \
+that you're searching — just do it and weave the results into your response \
+naturally.\
 """
+
+TOOLS = [
+    {
+        "name": "web_search",
+        "description": "Search the web for information. Returns titles, URLs, and snippets.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query",
+                }
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "fetch_page",
+        "description": "Fetch and read a web page. Returns plain text content.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The URL to fetch",
+                }
+            },
+            "required": ["url"],
+        },
+    },
+]
+
+_TAG_RE = re.compile(r"<[^>]+>")
+
+async def _web_search(query: str) -> str:
+    """Search DuckDuckGo HTML and return top results."""
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(
+                "https://html.duckduckgo.com/html/",
+                params={"q": query},
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            results = []
+            for match in re.finditer(
+                r'<a rel="nofollow" class="result__a" href="([^"]+)"[^>]*>(.*?)</a>.*?'
+                r'<a class="result__snippet"[^>]*>(.*?)</a>',
+                resp.text, re.DOTALL,
+            ):
+                url = unescape(match.group(1))
+                title = _TAG_RE.sub("", unescape(match.group(2))).strip()
+                snippet = _TAG_RE.sub("", unescape(match.group(3))).strip()
+                results.append(f"{title}\n{url}\n{snippet}")
+                if len(results) >= 5:
+                    break
+            return "\n\n".join(results) if results else "No results found."
+    except Exception as e:
+        return f"Search failed: {e}"
+
+async def _fetch_page(url: str) -> str:
+    """Fetch a URL and return text content (truncated)."""
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            text = _TAG_RE.sub(" ", resp.text)
+            text = unescape(text)
+            text = re.sub(r"\s+", " ", text).strip()
+            return text[:4000] if len(text) > 4000 else text
+    except Exception as e:
+        return f"Fetch failed: {e}"
 
 # ---------------------------------------------------------------------------
 # AudioSocket Transport
@@ -313,8 +393,24 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
 
     context = OpenAILLMContext(
         messages=[{"role": "system", "content": SYSTEM_PROMPT}],
+        tools=TOOLS,
     )
     context_aggregator = llm.create_context_aggregator(context)
+
+    async def on_web_search(params: FunctionCallParams):
+        query = params.arguments.get("query", "")
+        logger.info(f"Web search: {query}")
+        result = await _web_search(query)
+        await params.result_callback(result)
+
+    async def on_fetch_page(params: FunctionCallParams):
+        url = params.arguments.get("url", "")
+        logger.info(f"Fetch page: {url}")
+        result = await _fetch_page(url)
+        await params.result_callback(result)
+
+    llm.register_function("web_search", on_web_search)
+    llm.register_function("fetch_page", on_fetch_page)
 
     pipeline = Pipeline([
         transport.input(),

@@ -30,6 +30,7 @@ from pipecat.frames.frames import (
     Frame,
     InputAudioRawFrame,
     InterruptionFrame,
+    LLMMessagesFrame,
     OutputAudioRawFrame,
     StartFrame,
     TTSSpeakFrame,
@@ -323,11 +324,12 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         params=PipelineParams(allow_interruptions=True, enable_metrics=False),
     )
 
-    # Launch directly into a fact — no preamble
-    await task.queue_frames([TTSSpeakFrame(
-        "So here's something you probably don't know. "
-        "The inventor of the fire hydrant is lost to history — because the "
-        "patent office that held the record burned down."
+    # Trigger LLM to generate a random opening fact each call
+    await task.queue_frames([LLMMessagesFrame(
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": "Hit me with something good."},
+        ]
     )])
 
     runner = PipelineRunner(handle_sigint=False)

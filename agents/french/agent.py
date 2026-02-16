@@ -3,14 +3,14 @@
 French Tutor - Québécois French conversation partner (ext 203)
 
 Uses Pipecat for conversation management with AudioSocket transport.
-
-NOTE: Deepgram Aura 2 French pronunciation may be limited. If quality is
-poor, consider switching to ElevenLabs Flash v2.5 multilingual.
+TTS: ElevenLabs Flash v2.5 multilingual (Jessica voice) for proper French
+pronunciation. STT: Deepgram Nova-3 with language="multi" for French/English.
 
 Usage:
     source .venv/bin/activate
     export DEEPGRAM_API_KEY=...
     export ANTHROPIC_API_KEY=...
+    export ELEVENLABS_API_KEY=...
     python agent.py
 """
 
@@ -45,6 +45,7 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.anthropic import AnthropicLLMService
 from pipecat.services.deepgram import DeepgramSTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
+from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from deepgram import LiveOptions
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
@@ -306,10 +307,12 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         enable_prompt_caching=True,
     )
 
-    # NOTE: Test French pronunciation quality. If poor, switch to ElevenLabs.
-    tts = DeepgramTTSService(
-        api_key=os.environ["DEEPGRAM_API_KEY"],
-        voice="aura-2-andromeda-en",
+    # ElevenLabs multilingual v2.5 for proper French pronunciation
+    tts = ElevenLabsTTSService(
+        api_key=os.environ["ELEVENLABS_API_KEY"],
+        voice_id="cgSgspJ2msm6clMCkdW9",  # Jessica — warm, conversational
+        model="eleven_flash_v2_5",         # multilingual, low latency
+        sample_rate=ASTERISK_RATE,
     )
 
     context = OpenAILLMContext(
@@ -347,7 +350,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
 
 
 async def main():
-    missing = [k for k in ["DEEPGRAM_API_KEY", "ANTHROPIC_API_KEY"] if not os.environ.get(k)]
+    missing = [k for k in ["DEEPGRAM_API_KEY", "ANTHROPIC_API_KEY", "ELEVENLABS_API_KEY"] if not os.environ.get(k)]
     if missing:
         print(f"\n  Missing required env vars: {', '.join(missing)}")
         sys.exit(1)
