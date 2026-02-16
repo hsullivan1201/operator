@@ -83,19 +83,82 @@ Never guess at unclear requests.
 
 The current date and time is {now}.
 
-You can transfer the caller to the following extensions:
-- Extension 1: Hello world greeting (French)
-- Extension 2: Echo test (caller hears themselves back)
-- Extension 4: Music on hold
-- Extension 5: Congratulations message
-- Extension 6: CISM 89.3 — Montreal college radio
-- Extension 7: KEXP — Seattle radio
-- Extension 8: The Gamut radio
+You can transfer the caller to the following utility extensions:
+- 101: Hello world greeting
+- 102: Echo test (caller hears themselves back)
+- 103: DTMF test (enter digits, hear them read back)
+- 104: Music on hold
+- 105: Congratulations message
+
+Radio stations (all 7xx):
+
+Canada:
+- 700: CISM 89.3 — Montreal college radio. Francophone indie, electronic, \
+and experimental. Great for hearing what's bubbling up in Quebec's music scene.
+- 701: CIUT 89.5 — Toronto college radio. Eclectic programming from the \
+University of Toronto. World music, jazz, spoken word, and deep cuts.
+- 702: CKDU 88.1 — Halifax college radio. East coast Canadian indie, punk, \
+folk, and local Halifax bands. Raw and community-driven.
+
+Northeast US:
+- 703: WFMU 91.1 — Legendary freeform radio out of Jersey City. Completely \
+unpredictable: noise, obscure vinyl, comedy, outsider music. The gold \
+standard of freeform radio. If you want to hear something you've never \
+heard before, this is it.
+- 704: New Sounds — WNYC's experimental and ambient channel. Curated new \
+classical, electronic, and sound art. Perfect for late-night listening or \
+when you want something meditative and boundary-pushing.
+- 705: WNYC 93.9 — New York public radio. News, talk, and cultural \
+programming. The Takeaway, Radiolab, and local NYC coverage.
+- 706: WMBR 88.1 — MIT's college radio. Brainy and adventurous: electronic, \
+avant-garde, jazz, and eclectic shows programmed by MIT students and staff.
+- 707: WBUR 90.9 — Boston's NPR station. News, On Point, Here and Now. \
+Quality journalism and public affairs.
+
+Midwest:
+- 708: CHIRP 107.1 — Chicago independent radio. Volunteer-run with a focus \
+on local Chicago music and indie. Warm community vibe with great taste.
+- 709: WBEZ 91.5 — Chicago's NPR station. Home of This American Life. \
+News, storytelling, and cultural programming.
+
+West Coast:
+- 710: KEXP 90.3 — Seattle's beloved freeform station. Indie rock, world \
+music, hip-hop, electronic — expertly curated with a passion for discovery. \
+Famous for in-studio live sessions. If you want one station, make it this one.
+- 711: KALX 90.7 — UC Berkeley college radio. Freeform with a West Coast \
+edge. Punk, experimental, hip-hop, and whatever the DJs are into.
+- 712: BFF.fm — San Francisco community radio. Local SF music, indie pop, \
+DJ sets, and neighborhood vibes. Like having a cool friend pick the music.
+- 713: KQED 88.5 — San Francisco NPR. Forum with Mina Kim, California \
+Report, and thoughtful Bay Area journalism.
+- 714: KBOO 90.7 — Portland community radio. Progressive, grassroots, and \
+fiercely independent. Folk, world music, activism, and local Portland voices.
+- 715: XRAY.fm 91.1 — Portland freeform. Music-forward with an indie and \
+alternative focus. Think of it as Portland's cooler younger sibling to KBOO.
+
+South / National:
+- 716: The Gamut — Oklahoma-based freeform. A wild mix of everything from \
+bluegrass to metal to jazz. No playlist, no algorithm, just vibes.
+- 717: WETA Classical 90.9 — Washington DC classical. Symphonies, chamber \
+music, and opera. Elegant and relaxing, perfect for focus or unwinding.
+- 718: NPR — National program stream. All Things Considered, Morning Edition, \
+and the full NPR news lineup.
+
+When the caller asks for a recommendation, consider their mood:
+- Adventurous / surprise me: WFMU (703), KEXP (710), The Gamut (716)
+- Chill / ambient / focus: New Sounds (704), WETA Classical (717)
+- Indie / alternative: KEXP (710), BFF.fm (712), XRAY.fm (715), CHIRP (708)
+- News / talk / NPR: WNYC (705), WBUR (707), WBEZ (709), KQED (713), NPR (718)
+- College radio energy: WFMU (703), KALX (711), WMBR (706), CISM (700), CKDU (702)
+- Community / local flavor: KBOO (714), BFF.fm (712), CHIRP (708), CIUT (701)
 
 When the caller asks to be connected to a service (radio, music, echo test, \
 etc.), use the transfer_call tool. Confirm what you're connecting them to \
 before transferring. After transferring, the call leaves your hands — say a \
-brief goodbye before using the tool.\
+brief goodbye before using the tool.
+
+Tip the caller: while listening to a station, press 4 to hear what's \
+currently playing, 5 to activate room speakers, and 6 to turn them off.\
 """
 
 TOOLS = [
@@ -107,7 +170,7 @@ TOOLS = [
             "properties": {
                 "extension": {
                     "type": "string",
-                    "description": "The extension number to transfer to (e.g. '7' for KEXP)",
+                    "description": "The 3-digit extension number to transfer to (e.g. '710' for KEXP)",
                 }
             },
             "required": ["extension"],
@@ -196,12 +259,33 @@ class AudioSocketOutputTransport(BaseOutputTransport):
         self._playback_start: float = 0
         self._samples_sent: int = 0
         self._closed: bool = False
+        self._last_audio_time: float = 0
+        self._keepalive_task: Optional[asyncio.Task] = None
 
     async def start(self, frame: StartFrame):
         await super().start(frame)
         await self.set_transport_ready(frame)
         self._playback_start = 0
         self._samples_sent = 0
+        self._last_audio_time = time.monotonic()
+        self._keepalive_task = self.create_task(self._keepalive_loop())
+
+    async def _keepalive_loop(self):
+        """Send silence frames to prevent Asterisk's 2s AudioSocket timeout."""
+        silence = b"\x00" * 320  # 20ms at 8kHz 16-bit mono
+        header = struct.pack(">BH", MSG_AUDIO, len(silence))
+        try:
+            while not self._closed:
+                await asyncio.sleep(0.5)
+                # Only send keepalive if no real audio was sent recently
+                if time.monotonic() - self._last_audio_time > 1.0:
+                    try:
+                        self._writer.write(header + silence)
+                        await self._writer.drain()
+                    except Exception:
+                        break
+        except asyncio.CancelledError:
+            pass
 
     async def write_audio_frame(self, frame: OutputAudioRawFrame) -> bool:
         """Send audio chunk via AudioSocket protocol with real-time pacing."""
@@ -219,6 +303,7 @@ class AudioSocketOutputTransport(BaseOutputTransport):
             header = struct.pack(">BH", MSG_AUDIO, len(data))
             self._writer.write(header + data)
             await self._writer.drain()
+            self._last_audio_time = time.monotonic()
 
             # Pace to real-time
             self._samples_sent += len(data) // 2  # 16-bit = 2 bytes/sample
@@ -247,16 +332,22 @@ class AudioSocketOutputTransport(BaseOutputTransport):
 
 
     async def stop(self, frame: EndFrame):
+        self._closed = True
+        if self._keepalive_task:
+            await self.cancel_task(self._keepalive_task)
+            self._keepalive_task = None
         await super().stop(frame)
-        if not self._closed:
-            try:
-                self._writer.write(struct.pack(">BH", MSG_HANGUP, 0))
-                await self._writer.drain()
-            except Exception:
-                pass
-            self._closed = True
+        try:
+            self._writer.write(struct.pack(">BH", MSG_HANGUP, 0))
+            await self._writer.drain()
+        except Exception:
+            pass
 
     async def cancel(self, frame: CancelFrame):
+        self._closed = True
+        if self._keepalive_task:
+            await self.cancel_task(self._keepalive_task)
+            self._keepalive_task = None
         await super().cancel(frame)
 
 
@@ -460,7 +551,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     # -- Tool: transfer_call --
     async def on_transfer_call(params: FunctionCallParams):
         ext = params.arguments.get("extension", "")
-        valid = {"1", "2", "4", "5", "6", "7", "8"}
+        valid = {str(n) for n in range(101, 106)} | {str(n) for n in range(700, 719)}
         if ext not in valid:
             await params.result_callback(
                 f"Invalid extension {ext}. Valid: {', '.join(sorted(valid))}"
