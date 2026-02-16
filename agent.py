@@ -45,6 +45,7 @@ from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.anthropic import AnthropicLLMService
 from pipecat.services.deepgram import DeepgramSTTService
+from pipecat.services.deepgram.tts import DeepgramTTSService
 from deepgram import LiveOptions
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.tts_service import TTSService
@@ -194,6 +195,7 @@ class AudioSocketOutputTransport(BaseOutputTransport):
         self._writer = writer
         self._playback_start: float = 0
         self._samples_sent: int = 0
+        self._closed: bool = False
 
     async def start(self, frame: StartFrame):
         await super().start(frame)
@@ -203,6 +205,8 @@ class AudioSocketOutputTransport(BaseOutputTransport):
 
     async def write_audio_frame(self, frame: OutputAudioRawFrame) -> bool:
         """Send audio chunk via AudioSocket protocol with real-time pacing."""
+        if self._closed:
+            return False
         try:
             data = frame.audio
             rate = frame.sample_rate or ASTERISK_RATE
@@ -225,8 +229,13 @@ class AudioSocketOutputTransport(BaseOutputTransport):
                 await asyncio.sleep(sleep)
 
             return True
+        except (BrokenPipeError, ConnectionResetError):
+            logger.info("AudioSocket: connection closed (transfer or hangup)")
+            self._closed = True
+            return False
         except Exception as e:
             logger.error(f"AudioSocket write error: {e}")
+            self._closed = True
             return False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
@@ -239,11 +248,13 @@ class AudioSocketOutputTransport(BaseOutputTransport):
 
     async def stop(self, frame: EndFrame):
         await super().stop(frame)
-        try:
-            self._writer.write(struct.pack(">BH", MSG_HANGUP, 0))
-            await self._writer.drain()
-        except Exception:
-            pass
+        if not self._closed:
+            try:
+                self._writer.write(struct.pack(">BH", MSG_HANGUP, 0))
+                await self._writer.drain()
+            except Exception:
+                pass
+            self._closed = True
 
     async def cancel(self, frame: CancelFrame):
         await super().cancel(frame)
@@ -426,11 +437,13 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     llm = AnthropicLLMService(
         api_key=os.environ["ANTHROPIC_API_KEY"],
         model="claude-haiku-4-5-20251001",
+        enable_prompt_caching=True,
     )
 
     # -- TTS --
-    tts = KokoroTTSService(
-        api_key=os.environ.get("DEEPINFRA_API_KEY", ""),
+    tts = DeepgramTTSService(
+        api_key=os.environ["DEEPGRAM_API_KEY"],
+        voice="aura-2-helena-en",
     )
 
     # -- Context --
@@ -540,8 +553,7 @@ async def main():
         print(f"  Set them and try again.\n")
         sys.exit(1)
 
-    has_kokoro = bool(os.environ.get("DEEPINFRA_API_KEY"))
-    logger.info(f"TTS: {'Kokoro (DeepInfra)' if has_kokoro else 'espeak-ng (local)'}")
+    logger.info("TTS: Deepgram (aura-2-helena-en)")
 
     server = await asyncio.start_server(handle_call, AUDIOSOCKET_HOST, AUDIOSOCKET_PORT)
     logger.info(f"Operator listening on {AUDIOSOCKET_HOST}:{AUDIOSOCKET_PORT}")
