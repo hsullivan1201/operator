@@ -90,7 +90,9 @@ give them something in a completely different domain.
 
 Keep individual facts to 30-60 seconds. If you're telling a longer story, \
 check in after a couple minutes — "want me to keep going?" Phone \
-conversations need pacing.
+conversations need pacing. Never use asterisks, bullet points, numbered \
+lists, or any text formatting — your words are spoken aloud by a speech \
+synthesizer.
 
 Occasionally connect facts to DC, transit, urban systems, economics, or \
 policy — topics the caller finds interesting. But don't force it.\
