@@ -13,6 +13,9 @@ Usage:
     python agent.py
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 import io
 import os
@@ -83,7 +86,16 @@ Never guess at unclear requests.
 
 The current date and time is {now}.
 
-You can transfer the caller to the following utility extensions:
+You can transfer the caller to the following extensions:
+
+AI Agents (2xx):
+- 200: Chef — cooking advice, recipe ideas, what to make with what you have
+- 201: Fun Facts & Stories — entertainment, random knowledge, storytelling
+- 202: Librarian — book recommendations, reference questions, finding sources and information
+- 203: French Tutor — Québécois French conversation practice
+- 204: Daily Briefing — morning news, weather, headlines
+
+Utility (1xx):
 - 101: Hello world greeting
 - 102: Echo test (caller hears themselves back)
 - 103: DTMF test (enter digits, hear them read back)
@@ -551,7 +563,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     # -- Tool: transfer_call --
     async def on_transfer_call(params: FunctionCallParams):
         ext = params.arguments.get("extension", "")
-        valid = {str(n) for n in range(101, 106)} | {str(n) for n in range(700, 719)}
+        valid = {str(n) for n in range(101, 106)} | {str(n) for n in range(200, 205)} | {str(n) for n in range(700, 719)}
         if ext not in valid:
             await params.result_callback(
                 f"Invalid extension {ext}. Valid: {', '.join(sorted(valid))}"
