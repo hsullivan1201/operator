@@ -49,6 +49,7 @@ from deepgram import LiveOptions
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.tts_service import TTSService
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.transports.base_input import BaseInputTransport
 from pipecat.transports.base_output import BaseOutputTransport
 from pipecat.transports.base_transport import BaseTransport, TransportParams
@@ -288,15 +289,15 @@ class KokoroTTSService(TTSService):
         self._voice = voice
 
     async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Frame, None]:
-        # Try Kokoro
+        # Try Kokoro (streaming)
         if self._api_key:
             try:
-                audio = await self._kokoro(text)
-                yield TTSAudioRawFrame(
-                    audio=audio,
-                    sample_rate=self.KOKORO_RATE,
-                    num_channels=1,
-                )
+                async for chunk in self._kokoro_stream(text):
+                    yield TTSAudioRawFrame(
+                        audio=chunk,
+                        sample_rate=self.KOKORO_RATE,
+                        num_channels=1,
+                    )
                 return
             except Exception as e:
                 logger.warning(f"Kokoro TTS failed: {e}")
@@ -309,9 +310,10 @@ class KokoroTTSService(TTSService):
             num_channels=1,
         )
 
-    async def _kokoro(self, text: str) -> bytes:
+    async def _kokoro_stream(self, text: str) -> AsyncGenerator[bytes, None]:
         async with httpx.AsyncClient() as client:
-            resp = await client.post(
+            async with client.stream(
+                "POST",
                 self.KOKORO_URL,
                 headers={
                     "Authorization": f"Bearer {self._api_key}",
@@ -324,9 +326,12 @@ class KokoroTTSService(TTSService):
                     "response_format": "pcm",
                 },
                 timeout=15.0,
-            )
-            resp.raise_for_status()
-            return resp.content
+            ) as resp:
+                resp.raise_for_status()
+                # 4800 bytes = 100ms at 24kHz 16-bit mono
+                async for chunk in resp.aiter_bytes(chunk_size=4800):
+                    if chunk:
+                        yield chunk
 
     async def _espeak(self, text: str) -> tuple[bytes, int]:
         proc = await asyncio.create_subprocess_exec(
@@ -396,7 +401,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
             audio_in_passthrough=True,
             audio_out_enabled=True,
             audio_out_sample_rate=ASTERISK_RATE,
-            vad_analyzer=SileroVADAnalyzer(),
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.6)),
         ),
     )
 
