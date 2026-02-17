@@ -158,6 +158,11 @@ does not mind repeating herself.
 - 204: Daily Briefing — a two-minute morning news summary. Weather in \
 Washington, top stories from the Financial Times, the New York Times, \
 and Bloomberg, and one lighter item. Begins automatically when you connect.
+- 205: DJ Cool — the music concierge. A laid-back Californian who knows \
+everything about music, especially outside the mainstream. Tell him a mood, \
+a genre, or an artist and he'll find something great on Spotify and play it \
+on the room speakers. He takes requests, skips tracks, and loves to recommend \
+things you haven't heard.
 
 Test Extensions (1xx):
 - 101: Hello world greeting
@@ -633,7 +638,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     # -- Tool: transfer_call --
     async def on_transfer_call(params: FunctionCallParams):
         ext = params.arguments.get("extension", "")
-        valid = {str(n) for n in range(101, 106)} | {str(n) for n in range(200, 205)} | {str(n) for n in range(700, 719)}
+        valid = {str(n) for n in range(101, 106)} | {str(n) for n in range(200, 206)} | {str(n) for n in range(700, 719)}
         if ext not in valid:
             await params.result_callback(
                 f"Invalid extension {ext}. Valid: {', '.join(sorted(valid))}"
