@@ -225,6 +225,26 @@ music, and opera. Elegant and relaxing.
 - 718: NPR — National program stream. All Things Considered, Morning \
 Edition, and the full NPR news lineup.
 
+Spotify Playlists (8xx):
+- 800: radio 2
+- 801: 140+
+- 802: noise
+- 803: folksy
+- 804: Country
+- 805: Actually good Classical
+- 806: songs I like from radio
+- 807: RAP
+- 808: Québécois music
+- 809: Cool beans
+- 810: My playlist #24
+- 811: tunes
+
+Spotify playlists play on the room speakers. DTMF while listening: \
+1 previous, 2 pause/resume, 3 next, 4 now playing, 6 stop. \
+Callers can also dial 730 to start Spotify without a playlist and \
+pick music from the app, or dial 205 for DJ Cool to help them find \
+something.
+
 RECOMMENDATIONS
 
 When a caller asks for a station recommendation, consider their mood:
@@ -638,7 +658,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     # -- Tool: transfer_call --
     async def on_transfer_call(params: FunctionCallParams):
         ext = params.arguments.get("extension", "")
-        valid = {str(n) for n in range(101, 106)} | {str(n) for n in range(200, 206)} | {str(n) for n in range(700, 719)}
+        valid = {str(n) for n in range(101, 106)} | {str(n) for n in range(200, 206)} | {str(n) for n in range(700, 719)} | {"730"} | {str(n) for n in range(800, 812)}
         if ext not in valid:
             await params.result_callback(
                 f"Invalid extension {ext}. Valid: {', '.join(sorted(valid))}"
