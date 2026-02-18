@@ -2,6 +2,8 @@
 
 Telephone operator voice agent for an Asterisk-based phone system. Dial 0 from the phone to talk to it. It answers questions, recommends radio stations by mood, and transfers callers to any extension.
 
+The Asterisk config (dialplan, SIP, radio streams, Spotify playlists) lives in a separate repo: [hsullivan1201/phone-setup](https://github.com/hsullivan1201/phone-setup). This repo is just the voice agents.
+
 ## Stack
 
 - **Framework**: Pipecat 0.0.102 with custom AudioSocket transport
