@@ -24,6 +24,9 @@ import time
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from call_log import CallLog, make_transcript_logger
+
 import httpx
 
 from loguru import logger
@@ -103,6 +106,14 @@ When a caller describes a mood, genre, or artist, search Spotify and pick \
 something good — ideally something a little unexpected. Start playback and \
 tell them what you chose and why it rules. Keep it to a couple sentences — \
 you're enthusiastic, not a podcast.
+
+Searching tips: The caller is speaking on a telephone, so what you hear comes \
+through speech-to-text. Spelled-out numbers like "nineteen ninety nine" should \
+be searched as digits ("1999"). Phonetic mishearings are common — if a search \
+comes back empty or wrong, think about what the caller might have actually said \
+and try alternate spellings or shorter queries. Drop filler words and articles \
+to keep searches tight. If you know the song or artist they mean, just search \
+for what you know it's called, not what the transcription says.
 
 You can also skip tracks, go back, pause, resume, and tell the caller what's \
 currently playing.
@@ -330,7 +341,8 @@ class SpotifyClient:
             logger.info("Starting librespot...")
             subprocess.Popen(
                 ["setsid", "librespot", "-n", self._device_name, "-b", "320",
-                 "--backend", "pulseaudio", "-c", str(Path.home() / ".cache/librespot")],
+                 "--backend", "pulseaudio", "--volume-ctrl", "fixed",
+                 "-c", str(Path.home() / ".cache/librespot")],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
             # Wait for device to register with Spotify
@@ -682,6 +694,7 @@ class AudioSocketTransport(BaseTransport):
 async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     logger.info("New AudioSocket connection")
 
+    call_uuid = ""
     try:
         header = await reader.readexactly(3)
         msg_type = header[0]
@@ -694,6 +707,8 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         logger.error(f"Failed to read UUID: {e}")
         writer.close()
         return
+
+    call_log = CallLog("music", call_uuid)
 
     # Ensure librespot is running before the call starts
     spotify = _load_spotify_config()
@@ -748,51 +763,62 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         query = params.arguments.get("query", "")
         types = params.arguments.get("type", "track,album,artist,playlist")
         result = await spotify.search(query, types)
+        call_log.log_tool_call("search_spotify", params.arguments, result)
         await params.result_callback(result)
 
     async def on_play_context(params: FunctionCallParams):
         uri = params.arguments.get("uri", "")
         result = await spotify.play_context(uri)
+        call_log.log_tool_call("play_context", params.arguments, result)
         await params.result_callback(result)
 
     async def on_play_track(params: FunctionCallParams):
         uri = params.arguments.get("uri", "")
         result = await spotify.play_tracks([uri])
+        call_log.log_tool_call("play_track", params.arguments, result)
         await params.result_callback(result)
 
     async def on_queue_track(params: FunctionCallParams):
         uri = params.arguments.get("uri", "")
         result = await spotify.queue_track(uri)
+        call_log.log_tool_call("queue_track", params.arguments, result)
         await params.result_callback(result)
 
     async def on_next_track(params: FunctionCallParams):
         result = await spotify.next_track()
+        call_log.log_tool_call("next_track", {}, result)
         await params.result_callback(result)
 
     async def on_prev_track(params: FunctionCallParams):
         result = await spotify.prev_track()
+        call_log.log_tool_call("prev_track", {}, result)
         await params.result_callback(result)
 
     async def on_pause_playback(params: FunctionCallParams):
         result = await spotify.pause()
+        call_log.log_tool_call("pause_playback", {}, result)
         await params.result_callback(result)
 
     async def on_resume_playback(params: FunctionCallParams):
         result = await spotify.resume()
+        call_log.log_tool_call("resume_playback", {}, result)
         await params.result_callback(result)
 
     async def on_now_playing(params: FunctionCallParams):
         result = await spotify.now_playing()
+        call_log.log_tool_call("now_playing", {}, result)
         await params.result_callback(result)
 
     async def on_get_recommendations(params: FunctionCallParams):
         seed_artists = params.arguments.get("seed_artists", [])
         seed_genres = params.arguments.get("seed_genres", [])
         result = await spotify.get_recommendations(seed_artists, seed_genres)
+        call_log.log_tool_call("get_recommendations", params.arguments, result)
         await params.result_callback(result)
 
     async def on_my_playlists(params: FunctionCallParams):
         result = await spotify.my_playlists()
+        call_log.log_tool_call("my_playlists", {}, result)
         await params.result_callback(result)
 
     llm.register_function("search_spotify", on_search_spotify)
@@ -810,22 +836,46 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     # Silence watchdog: resets context after 30s of no user speech.
     # Also trims context to prevent unbounded growth.
     SILENCE_TIMEOUT = 30.0
-    MAX_CONTEXT_MESSAGES = 10
+    MAX_CONTEXT_MESSAGES = 12
+    KEEP_ON_SLEEP = 6  # user/assistant messages to preserve across sleep
 
     class SilenceWatchdog(FrameProcessor):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
             self._last_speech: float = time.monotonic()
             self._asleep: bool = False
+            self._saved_context: list = []  # recent exchanges preserved across sleep
 
         async def process_frame(self, frame: Frame, direction: FrameDirection):
             await super().process_frame(frame, direction)
 
             if isinstance(frame, TranscriptionFrame) and frame.text.strip():
                 if self._asleep:
-                    # User spoke after silence — reset context, re-greet
-                    logger.info("User spoke after silence, resetting context")
-                    context.messages = [context.messages[0]]
+                    # User spoke after silence — restore with playback state + saved context
+                    logger.info("User spoke after silence, waking up")
+                    msgs = [context.messages[0]]
+                    state_parts = []
+                    try:
+                        np = await spotify.now_playing()
+                        if "Nothing" not in np:
+                            state_parts.append(f"Now playing: {np}")
+                        resp = await spotify._api("GET", "/me/player/queue")
+                        if resp.status_code == 200:
+                            queue = resp.json().get("queue", [])[:5]
+                            if queue:
+                                upcoming = ", ".join(
+                                    f"{t['name']} by {t['artists'][0]['name']}" for t in queue
+                                )
+                                state_parts.append(f"Queue: {upcoming}")
+                    except Exception:
+                        pass
+                    state_parts.append(
+                        "This call is already in progress. You already greeted the caller — just pick up naturally."
+                    )
+                    msgs.append({"role": "user", "content": "[" + " | ".join(state_parts) + "]"})
+                    msgs.extend(self._saved_context)
+                    context.set_messages(msgs)
+                    self._saved_context = []
                     self._asleep = False
                 self._last_speech = time.monotonic()
 
@@ -833,7 +883,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
                 # Trim context
                 msgs = context.messages
                 if len(msgs) > MAX_CONTEXT_MESSAGES + 1:
-                    context.messages = [msgs[0]] + msgs[-(MAX_CONTEXT_MESSAGES):]
+                    context.set_messages([msgs[0]] + msgs[-(MAX_CONTEXT_MESSAGES):])
 
                 # Check silence timeout — don't send to LLM if asleep
                 if self._asleep:
@@ -843,7 +893,10 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
                 elapsed = time.monotonic() - self._last_speech
                 if elapsed > SILENCE_TIMEOUT and len(context.messages) > 1:
                     logger.info(f"Silence for {elapsed:.0f}s, going to sleep")
-                    context.messages = [context.messages[0]]
+                    # Save recent exchanges before sleeping
+                    msgs = context.messages
+                    self._saved_context = msgs[-(KEEP_ON_SLEEP):] if len(msgs) > KEEP_ON_SLEEP else msgs[1:]
+                    context.set_messages([msgs[0]])
                     self._asleep = True
 
             await self.push_frame(frame, direction)
@@ -853,6 +906,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     pipeline = Pipeline([
         transport.input(),
         stt,
+        make_transcript_logger(call_log),
         watchdog,
         context_aggregator.user(),
         llm,
@@ -866,12 +920,19 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         params=PipelineParams(allow_interruptions=True, enable_metrics=False),
     )
 
-    await task.queue_frames([TTSSpeakFrame("Yooo, DJ Cool here. What are we vibing to?")])
+    greeting = "Yooo, DJ Cool here. What are we vibing to?"
+    call_log.log_greeting(greeting)
+    await task.queue_frames([TTSSpeakFrame(greeting)])
 
     runner = PipelineRunner(handle_sigint=False)
-    await runner.run(task)
-
-    logger.info("Pipeline finished")
+    try:
+        await runner.run(task)
+    finally:
+        logger.info("Pipeline finished")
+        try:
+            call_log.finalize(context.messages)
+        except Exception as e:
+            logger.error(f"Call log finalize error: {e}")
     writer.close()
     try:
         await writer.wait_closed()
