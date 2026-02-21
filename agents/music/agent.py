@@ -90,47 +90,75 @@ gendered. Just talk to people like they're your friend.
 But here's the thing — underneath all that, you actually know an insane \
 amount about music. Like, encyclopedic. You grew up digging through crates \
 at Amoeba Records in Hollywood. You love post-punk, krautrock, Afrobeat, \
-free jazz, shoegaze, Brazilian tropicália, dub, ambient, art pop, and \
-anything that sounds like it was made by someone who meant it. You'd rather \
-put on Broadcast than the Beatles, Mulatu Astatke than Maroon 5. You think \
-Can invented everything. You have strong opinions and you share them freely.
+free jazz, shoegaze, Brazilian tropicalia, dub, ambient, art pop, and \
+anything that sounds like it was made by someone who meant it. You would \
+rather put on Broadcast than the Beatles, Mulatu Astatke than Maroon 5. \
+You think Can invented everything. You have strong opinions and you share \
+them freely.
 
-When someone asks for something mainstream, you'll play it — you're chill, \
-not a jerk — but you will absolutely try to steer them somewhere cooler. \
-"Dude yeah I got you with some Coldplay, but have you heard Cocteau \
-Twins? It's like Coldplay but if they were actually good. No offense. \
+When someone asks for something mainstream, you will play it — you are \
+chill, not a jerk — but you will absolutely try to steer them somewhere \
+cooler. "Dude yeah I got you with some Coldplay, but have you heard Cocteau \
+Twins? It is like Coldplay but if they were actually good. No offense. \
 Actually, full offense." That kind of energy.
 
 You get genuinely hyped when someone asks for something you love. If \
 someone says "play me some krautrock" you should basically lose your mind \
 with excitement.
 
-When a caller describes a mood, genre, or artist, search Spotify and pick \
-something good — ideally something a little unexpected. Start playback and \
-tell them what you chose and why it rules. Keep it to a couple sentences — \
-you're enthusiastic, not a podcast.
+VIBE REFERENCE — check this first whenever a caller describes a mood, \
+feeling, or vibe. Find specific artist names here, then search Spotify for \
+those names. Never search Spotify with mood words or genre descriptions — \
+only proper nouns (artist names, album titles, song titles).
 
-Searching tips: The caller is speaking on a telephone, so what you hear comes \
-through speech-to-text. Spelled-out numbers like "nineteen ninety nine" should \
-be searched as digits ("1999"). Phonetic mishearings are common — if a search \
-comes back empty or wrong, think about what the caller might have actually said \
-and try alternate spellings or shorter queries. Drop filler words and articles \
-to keep searches tight. If you know the song or artist they mean, just search \
-for what you know it's called, not what the transcription says.
+late night quiet unsettled: Grouper, Julianna Barwick, Molly Drake, William Basinski, Jefre Cantu-Ledesma, Stars of the Lid
+driving hypnotic motorik: Can, Neu!, Cluster, Harmonia, Stereolab, Broadcast, Moondog
+joyful afrobeat highlife: Fela Kuti, William Onyeabor, Ebo Taylor, BLO, Cymande
+dub heavy bottom end: Lee Scratch Perry, Augustus Pablo, King Tubby, The Congos, Basic Channel
+Brazilian tropicalia: Caetano Veloso, Gal Costa, Tom Ze, Os Mutantes, Arthur Verocai
+free jazz avant-garde: Alice Coltrane, Pharoah Sanders, Albert Ayler, Don Cherry, Sun Ra, Ornette Coleman
+shoegaze dream pop: My Bloody Valentine, Slowdive, Cocteau Twins, Lush, Mazzy Star, Alvvays
+post-punk angular: Wire, Gang of Four, The Fall, Siouxsie and the Banshees, Ought, Parquet Courts
+ambient textural: Brian Eno, Harold Budd, Hiroshi Yoshimura, The Caretaker, Visible Cloaks
+queer experimental art pop: SOPHIE, Arca, Holly Herndon, Jenny Hval, Anohni, Klein, Dorian Electra, yeule, Eartheater
+queer tender confessional: Sufjan Stevens, Anohni, Angel Olsen, Mitski, Perfume Genius, Snail Mail
+hyperpop maximalist electronic: 100 gecs, SOPHIE, Charli XCX, Dorian Electra, Hannah Diamond, Slayyyter
+prog symphonic epic: Genesis (Selling England by the Pound era), Yes, King Crimson, Van der Graaf Generator, Gentle Giant, Camel
+art rock theatrical: Kate Bush, Peter Gabriel, Scott Walker, David Bowie Berlin era, St. Vincent
+folksy finger-picked pastoral: John Fahey, Nick Drake, Bert Jansch, Vashti Bunyan, Joanna Newsom, William Tyler
+contemporary folk indie folk: Adrianne Lenker, Hand Habits, Bonnie Prince Billy, Bill Callahan, Ryley Walker
+abstract hip hop beats: MF DOOM, Madlib, billy woods, MIKE, Mach-Hommy, Earl Sweatshirt, Armand Hammer
+jazzy soulful hip hop: Kendrick Lamar, Little Simz, Noname, Saba, Injury Reserve
+sun-drenched soul 70s warmth: Shuggie Otis, Bill Withers, Minnie Riperton, Leon Ware, Marvin Gaye
+art pop baroque pop: Joanna Newsom, Julia Holter, Caroline Polachek, Aldous Harding, Anna von Hausswolff
+electronic club: DJ Rashad, Jlin, Actress, Four Tet, Floating Points, Objekt
 
-IMPORTANT: When you search Spotify and get results back, IMMEDIATELY follow up \
-with the appropriate action — play_track, queue_track, play_context, whatever \
-fits. Do NOT just describe what you found and wait. The caller asked you to do \
+SEARCH DISCIPLINE — this is non-negotiable:
+1. Check the VIBE REFERENCE above first.
+2. If you can name at least two specific artists from memory or the reference, go straight to search_spotify with those names.
+3. If you have any doubt about quality or specificity, call research_vibe — it will find better answers. Use it liberally. Quality matters more than speed.
+4. Before calling research_vibe, always say a short in-character filler line — "oh dude let me dig into that real quick" or "hold on I gotta look this up" or "gnarly question, one sec." Keep it brief and natural. The filler plays while results load.
+5. Then search_spotify — but only with the artist or album names you found, never with vibe words.
+6. Never pass descriptions like "melancholy indie" or "late night vibes" to search_spotify. Only proper nouns.
+
+When you search Spotify and get results back, IMMEDIATELY follow up with the \
+appropriate action — play_track, queue_track, play_context, whatever fits. \
+Do NOT describe what you found and wait. The caller asked you to do \
 something, so do it. Search then act, always, in the same turn. Never say \
-"I found it, want me to play it?" — just play it. If they asked you to queue \
-something, search and then queue it. One fluid motion, dude.
+"I found it, want me to play it?" — just play it. One fluid motion, dude.
 
-You can also skip tracks, go back, pause, resume, and tell the caller what's \
-currently playing.
+Telephone STT quirks: Spelled-out numbers like "nineteen ninety nine" should \
+be searched as digits. Phonetic mishearings are common — if a search comes \
+back empty or wrong, think about what the caller might have actually said and \
+try alternate spellings or shorter queries. Drop filler words and articles. \
+If you know the song or artist they mean, search for what you know it is \
+called, not what the transcription says.
+
+You can also skip tracks, go back, pause, resume, and tell the caller what \
+is currently playing.
 
 The caller also has preset playlists on the phone system. If they mention \
-one of these by name, you can play it directly using play_context with \
-the URI:
+one of these by name, play it directly using play_context with the URI:
 - radio 2: spotify:playlist:2iFT8amMEWxZfnSKX8UEqz
 - 140+: spotify:playlist:2fHhVx7a0RBAE9z6SWBcM3
 - noise: spotify:playlist:4c4Q77o79kJ0ovxa8q4eRZ
@@ -139,7 +167,7 @@ the URI:
 - Actually good Classical: spotify:playlist:7GYuVMx94760wQkps7jvHb
 - songs I like from radio: spotify:playlist:6BPgLzgv4ObZilpGPqpVJx
 - RAP: spotify:playlist:1o1JVEi5dy64jNDkhh5eMK
-- Québécois music: spotify:playlist:4EyflLq6WyNK6Vg6jUiTry
+- Quebecois music: spotify:playlist:4EyflLq6WyNK6Vg6jUiTry
 - Cool beans: spotify:playlist:4pxVU4dtguLdvoAAjfBG0I
 - My playlist #24: spotify:playlist:4kudWbxWIm7xEHbPCubmUu
 - tunes: spotify:playlist:6iopRk1Jzwu7s6ARLdgHrb
@@ -156,18 +184,46 @@ Your words are spoken aloud by a speech synthesizer.\
 
 TOOLS = [
     {
+        "name": "research_vibe",
+        "description": (
+            "Look up specific artist and album names for a vibe you cannot fill from "
+            "the VIBE REFERENCE or your own knowledge. Returns names to pass to search_spotify. "
+            "Only call this when you genuinely cannot name at least two specific artists. "
+            "Do NOT call this for vibes already covered in the VIBE REFERENCE."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "vibe": {
+                    "type": "string",
+                    "description": (
+                        "Specific description of the mood or niche to research. "
+                        "Be concrete — e.g. 'Ethiopian jazz 1970s' or "
+                        "'lowercase ambient Japan' or 'queercore 1990s punk'. "
+                        "Do not pass vague terms like 'chill' or 'sad'."
+                    ),
+                },
+            },
+            "required": ["vibe"],
+        },
+    },
+    {
         "name": "search_spotify",
-        "description": "Search Spotify for tracks, albums, artists, or playlists. Returns top 5 results.",
+        "description": (
+            "Search Spotify for tracks, albums, artists, or playlists. Returns top results. "
+            "ONLY pass specific artist names, song titles, or album names. "
+            "Never pass mood words, vibe descriptions, or genre terms."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Search query (artist name, song title, genre, etc.)",
+                    "description": "Artist name, song title, or album name only. No mood or genre words.",
                 },
                 "type": {
                     "type": "string",
-                    "description": "Comma-separated types to search: track, album, artist, playlist",
+                    "description": "Comma-separated types: track, album, artist, playlist",
                     "default": "track,album,artist,playlist",
                 },
             },
@@ -204,13 +260,13 @@ TOOLS = [
     },
     {
         "name": "queue_track",
-        "description": "Add a track to the queue without interrupting current playback. Use this when the caller wants to line up songs.",
+        "description": "Add a track to the queue without interrupting current playback.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "uri": {
                     "type": "string",
-                    "description": "Spotify track URI to add to queue (e.g. spotify:track:xxx)",
+                    "description": "Spotify track URI to add to queue",
                 },
             },
             "required": ["uri"],
@@ -219,42 +275,27 @@ TOOLS = [
     {
         "name": "next_track",
         "description": "Skip to the next track.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-        },
+        "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "prev_track",
         "description": "Go back to the previous track.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-        },
+        "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "pause_playback",
         "description": "Pause the current playback.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-        },
+        "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "resume_playback",
         "description": "Resume playback.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-        },
+        "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "now_playing",
         "description": "Get info about the currently playing track.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-        },
+        "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "get_recommendations",
@@ -270,20 +311,103 @@ TOOLS = [
                 "seed_genres": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Genre names to seed recommendations (e.g. jazz, rock, classical)",
+                    "description": "Genre names to seed recommendations",
                 },
             },
         },
     },
     {
         "name": "my_playlists",
-        "description": "List the caller's saved Spotify playlists. Use this when they ask about 'my playlists' or want to play one of their own.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-        },
+        "description": "List the caller's saved Spotify playlists.",
+        "input_schema": {"type": "object", "properties": {}},
     },
 ]
+
+
+# ---------------------------------------------------------------------------
+# Vibe Research
+# ---------------------------------------------------------------------------
+
+_RESEARCH_SYSTEM = """\
+You are a music research assistant. Given a vibe or mood description, \
+search the web and return a concise list of specific artist names and \
+album titles that match — prioritizing sources like Pitchfork, \
+RateYourMusic, and AllMusic. Focus on quality and specificity. \
+Return ONLY a plain list of names, no prose, no explanation. \
+Format: one artist or album per line, e.g.:
+Grouper
+William Basinski
+Stars of the Lid - The Tired Sounds of Stars of the Lid\
+"""
+
+async def research_vibe(vibe: str, api_key: str) -> str:
+    """
+    Use the Anthropic API with web_search to find specific artist/album
+    names for a vibe. Returns a name list for DJ Cool to pass to Spotify.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            resp = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-beta": "interleaved-thinking-2025-05-14",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 512,
+                    "system": _RESEARCH_SYSTEM,
+                    "tools": [
+                        {
+                            "type": "web_search_20250305",
+                            "name": "web_search",
+                        }
+                    ],
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Find specific artists and albums for this vibe: {vibe}. "
+                                "Search Pitchfork, RateYourMusic, or AllMusic. "
+                                "Return only a plain list of names."
+                            ),
+                        }
+                    ],
+                },
+            )
+
+        if resp.status_code != 200:
+            logger.warning(f"research_vibe API error: {resp.status_code} {resp.text[:200]}")
+            return "Research unavailable. Use your own knowledge for this vibe."
+
+        data = resp.json()
+
+        # Extract text blocks from the response (ignore tool_use/tool_result blocks)
+        names = []
+        for block in data.get("content", []):
+            if block.get("type") == "text" and block.get("text", "").strip():
+                names.append(block["text"].strip())
+
+        if not names:
+            return "No results found. Use your own knowledge for this vibe."
+
+        result = "\n".join(names)
+        if len(result) > 800:
+            result = result[:800] + "..."
+
+        return (
+            f"Research results for '{vibe}':\n{result}\n\n"
+            "These are specific artist and album names. "
+            "Search Spotify for them directly."
+        )
+
+    except httpx.TimeoutException:
+        return "Research timed out. Use your own knowledge for this vibe."
+    except Exception as e:
+        logger.warning(f"research_vibe error: {e}")
+        return "Research failed. Use your own knowledge for this vibe."
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +485,6 @@ class SpotifyClient:
         return None
 
     async def ensure_librespot(self, force_restart: bool = False) -> Optional[str]:
-        """Ensure librespot is running and the Spotify device is visible."""
         if force_restart:
             logger.info("Restarting librespot...")
             subprocess.run(["pkill", "-x", "librespot"], capture_output=True)
@@ -379,7 +502,6 @@ class SpotifyClient:
         else:
             logger.info("Librespot already running")
 
-        # Wait for device to register with Spotify.
         for _ in range(8):
             await asyncio.sleep(1)
             device_id = await self._get_device_id()
@@ -452,7 +574,6 @@ class SpotifyClient:
         if resp.status_code not in (200, 204):
             return f"Play failed: {resp.status_code} {resp.text}"
 
-        # Enable shuffle for playlists and artists
         if "playlist" in uri or "artist" in uri:
             await asyncio.sleep(0.5)
             await self._api("PUT", f"/me/player/shuffle?state=true&device_id={device_id}")
@@ -585,7 +706,6 @@ class SpotifyClient:
 
 
 def _load_spotify_config() -> SpotifyClient:
-    """Load Spotify credentials from config file."""
     config_path = Path.home() / ".config/spotify-telephone/config"
     config = {}
     with open(config_path) as f:
@@ -780,7 +900,6 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
 
     call_log = CallLog("music", call_uuid)
 
-    # Ensure librespot is running before the call starts
     spotify = _load_spotify_config()
     try:
         await spotify.ensure_librespot()
@@ -829,6 +948,12 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     assistant_logger = make_assistant_logger(call_log)
 
     # -- Tool handlers --
+
+    async def on_research_vibe(params: FunctionCallParams):
+        vibe = params.arguments.get("vibe", "")
+        result = await research_vibe(vibe, os.environ["ANTHROPIC_API_KEY"])
+        call_log.log_tool_call("research_vibe", params.arguments, result)
+        await params.result_callback(result)
 
     async def on_search_spotify(params: FunctionCallParams):
         query = params.arguments.get("query", "")
@@ -892,6 +1017,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         call_log.log_tool_call("my_playlists", {}, result)
         await params.result_callback(result)
 
+    llm.register_function("research_vibe", on_research_vibe)
     llm.register_function("search_spotify", on_search_spotify)
     llm.register_function("play_context", on_play_context)
     llm.register_function("play_track", on_play_track)
@@ -904,11 +1030,10 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     llm.register_function("get_recommendations", on_get_recommendations)
     llm.register_function("my_playlists", on_my_playlists)
 
-    # Silence watchdog: resets context after 30s of no user speech.
-    # Also trims context to prevent unbounded growth.
+    # Silence watchdog
     SILENCE_TIMEOUT = 30.0
     MAX_CONTEXT_MESSAGES = 12
-    KEEP_ON_SLEEP = 6  # user/assistant messages to preserve across sleep
+    KEEP_ON_SLEEP = 6
 
     def _is_tool_result_message(msg: object) -> bool:
         if not isinstance(msg, dict) or msg.get("role") != "user":
@@ -923,15 +1048,12 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
 
     def _trim_context_messages(msgs: list, max_messages: int) -> list:
         trimmed = [msgs[0]] + msgs[-max_messages:]
-        # If trim splits a tool_use/tool_result pair, drop orphan tool_result.
         while len(trimmed) > 1 and _is_tool_result_message(trimmed[1]):
             trimmed.pop(1)
         return trimmed
 
     def _sanitize_context_slice(msgs: list) -> list:
         sanitized = list(msgs)
-        # If we begin with a tool_result, its paired tool_use was trimmed away.
-        # Drop leading orphan tool_result messages to keep Anthropic happy.
         while sanitized and _is_tool_result_message(sanitized[0]):
             sanitized.pop(0)
         return sanitized
@@ -941,14 +1063,13 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
             super().__init__(**kwargs)
             self._last_speech: float = time.monotonic()
             self._asleep: bool = False
-            self._saved_context: list = []  # recent exchanges preserved across sleep
+            self._saved_context: list = []
 
         async def process_frame(self, frame: Frame, direction: FrameDirection):
             await super().process_frame(frame, direction)
 
             if isinstance(frame, TranscriptionFrame) and frame.text.strip():
                 if self._asleep:
-                    # User spoke after silence — restore with playback state + saved context
                     logger.info("User spoke after silence, waking up")
                     msgs = [context.messages[0]]
                     state_parts = []
@@ -977,20 +1098,16 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
                 self._last_speech = time.monotonic()
 
             if isinstance(frame, LLMMessagesFrame):
-                # Trim context
                 msgs = context.messages
                 if len(msgs) > MAX_CONTEXT_MESSAGES + 1:
                     context.set_messages(_trim_context_messages(msgs, MAX_CONTEXT_MESSAGES))
-
-                # Check silence timeout — don't send to LLM if asleep
                 if self._asleep:
-                    return  # swallow the frame
+                    return
 
             if not self._asleep and not isinstance(frame, TranscriptionFrame):
                 elapsed = time.monotonic() - self._last_speech
                 if elapsed > SILENCE_TIMEOUT and len(context.messages) > 1:
                     logger.info(f"Silence for {elapsed:.0f}s, going to sleep")
-                    # Save recent exchanges before sleeping
                     msgs = context.messages
                     tail = msgs[-(KEEP_ON_SLEEP):] if len(msgs) > KEEP_ON_SLEEP else msgs[1:]
                     self._saved_context = _sanitize_context_slice(tail)
@@ -1047,7 +1164,6 @@ async def main():
         print(f"\n  Missing required env vars: {', '.join(missing)}")
         sys.exit(1)
 
-    # Verify Spotify config is readable
     try:
         _load_spotify_config()
     except Exception as e:
