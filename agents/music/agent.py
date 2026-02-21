@@ -16,8 +16,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import asyncio
-import hashlib
-import json
 import os
 import struct
 import subprocess
@@ -163,9 +161,25 @@ unless they explicitly ask for a lot.
 If they ask to queue an album, use queue_album. Do not use play_context for a \
 queue request because that interrupts what is currently playing.
 
-Never play or queue an entire artist (spotify:artist:xxx) unless the caller \
-explicitly asks to hear everything by that artist. An artist URI just shuffles \
-their whole catalog randomly, which is a bad listen.
+PLAY BEFORE QUEUE: Spotify requires an active playback session before you can \
+queue anything. If nothing is currently playing, always use play_track first \
+to start a session, then queue subsequent tracks. Never queue before playing.
+
+SEARCHING FOR TRACKS: When you want to play or queue a specific song, search \
+with type "track" and include the artist name in the query — e.g. \
+"Corridor Junior" or "Malajube Montréal -40°C". Never search for an artist \
+and try to queue the artist URI directly — that will fail or sound terrible.
+
+ARTIST FLOW — when someone asks for music by a specific artist:
+1. search "Artist Name" with type "artist" to get their URI, e.g. spotify:artist:4nn9uUq4K1vStqxe8t1CD4
+2. extract the artist ID — it is the part after the last colon, e.g. 4nn9uUq4K1vStqxe8t1CD4
+3. if the caller wants to pick an album, or you want to choose the best entry point: call get_artist_albums with that ID
+4. if they just want a song or two: call get_artist_top_tracks with that ID
+5. then play_track, play_context, or queue_album as appropriate
+
+Never pass a spotify:artist:xxx URI directly to play_context, play_track, or \
+queue_track — that shuffles their whole catalog randomly and is a bad listen. \
+Always go through get_artist_albums or get_artist_top_tracks first.
 
 Telephone STT quirks: Spelled-out numbers like "nineteen ninety nine" should \
 be searched as digits. Phonetic mishearings are common — if a search comes \
@@ -231,8 +245,10 @@ TOOLS = [
         "name": "search_spotify",
         "description": (
             "Search Spotify for tracks, albums, artists, or playlists. Returns top results. "
-            "ONLY pass specific artist names, song titles, or album names. "
-            "Never pass mood words, vibe descriptions, or genre terms."
+            "ONLY pass specific artist names, song titles, or album names — never mood words or genre terms. "
+            "Default to type='track' when you want to play or queue specific songs. "
+            "Only use type='album' when looking for an album URI to play as a context. "
+            "Only use type='artist' if the caller explicitly asks to browse an artist."
         ),
         "input_schema": {
             "type": "object",
@@ -243,8 +259,8 @@ TOOLS = [
                 },
                 "type": {
                     "type": "string",
-                    "description": "Comma-separated types: track, album, artist, playlist",
-                    "default": "track,album,artist,playlist",
+                    "description": "Type to search. Use 'track' for playing/queuing songs (default). Use 'album' for album playback. Use 'artist' only if browsing an artist.",
+                    "default": "track",
                 },
             },
             "required": ["query"],
@@ -355,6 +371,34 @@ TOOLS = [
         "description": "List the caller's saved Spotify playlists.",
         "input_schema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "get_artist_top_tracks",
+        "description": "Get top tracks for an artist by their Spotify artist ID. Returns track names and URIs you can play or queue. Use this after finding an artist URI from search to get actual playable tracks.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "artist_id": {
+                    "type": "string",
+                    "description": "Spotify artist ID (the part after spotify:artist: in the URI)",
+                },
+            },
+            "required": ["artist_id"],
+        },
+    },
+    {
+        "name": "get_artist_albums",
+        "description": "Get albums and singles for an artist by their Spotify artist ID. Returns album names, years, and URIs. Use this to let the caller pick a specific album rather than shuffling an artist's whole catalog.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "artist_id": {
+                    "type": "string",
+                    "description": "Spotify artist ID (the part after spotify:artist: in the URI)",
+                },
+            },
+            "required": ["artist_id"],
+        },
+    }
 ]
 
 
@@ -808,6 +852,34 @@ class SpotifyClient:
         names = [f"{t['name']} by {t['artists'][0]['name']}" for t in tracks[:5]]
         return f"{result} Recommended tracks include: {', '.join(names)}, and more."
 
+
+    async def get_artist_top_tracks(self, artist_id: str) -> str:
+        resp = await self._api("GET", f"/artists/{artist_id}/top-tracks", params={"market": "US"})
+        if resp.status_code != 200:
+            return f"Failed to fetch top tracks: {resp.status_code}"
+        tracks = resp.json().get("tracks", [])
+        if not tracks:
+            return "No top tracks found for that artist."
+        lines = []
+        for t in tracks[:10]:
+            lines.append(f"Track: {t['name']} — uri: {t['uri']}")
+        return "\n".join(lines)
+
+    async def get_artist_albums(self, artist_id: str) -> str:
+        resp = await self._api(
+            "GET", f"/artists/{artist_id}/albums",
+            params={"include_groups": "album,single", "market": "US", "limit": 10}
+        )
+        if resp.status_code != 200:
+            return f"Failed to fetch albums: {resp.status_code}"
+        items = resp.json().get("items", [])
+        if not items:
+            return "No albums found for that artist."
+        lines = []
+        for a in items:
+            lines.append(f"Album: {a['name']} ({a.get('release_date', '?')[:4]}) — uri: {a['uri']}")
+        return "\n".join(lines)
+
     async def my_playlists(self) -> str:
         resp = await self._api("GET", "/me/playlists", params={"limit": 20})
         if resp.status_code != 200:
@@ -1012,32 +1084,6 @@ def _is_tool_result_message(msg: object) -> bool:
     return False
 
 
-def _latest_tool_result_signature(messages: list[object]) -> Optional[str]:
-    """Stable signature for the most recent tool_result message in context."""
-    for msg in reversed(messages):
-        if not _is_tool_result_message(msg):
-            continue
-        content = msg.get("content")
-        if not isinstance(content, list):
-            continue
-
-        parts: list[str] = []
-        for block in content:
-            if not isinstance(block, dict) or block.get("type") != "tool_result":
-                continue
-            tool_use_id = block.get("tool_use_id")
-            if isinstance(tool_use_id, str) and tool_use_id:
-                parts.append(f"id:{tool_use_id}")
-                continue
-            normalized = json.dumps(block, ensure_ascii=False, sort_keys=True)
-            digest = hashlib.sha1(normalized.encode("utf-8")).hexdigest()
-            parts.append(f"sha1:{digest}")
-
-        if parts:
-            return "|".join(parts)
-    return None
-
-
 # ---------------------------------------------------------------------------
 # Tool Continuation Processor
 # ---------------------------------------------------------------------------
@@ -1051,27 +1097,18 @@ class ToolContinuationProcessor(FrameProcessor):
     def __init__(self, context, **kwargs):
         super().__init__(**kwargs)
         self._context = context
-        self._pending_tool_signature: Optional[str] = None
-        self._last_continued_signature: Optional[str] = None
+        self._pending_tool_result = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, LLMMessagesFrame):
             msgs = self._context.messages
-            tool_sig = _latest_tool_result_signature(msgs)
-            if tool_sig and tool_sig != self._last_continued_signature:
-                self._pending_tool_signature = tool_sig
+            if msgs and _is_tool_result_message(msgs[-1]):
+                self._pending_tool_result = True
 
-        if isinstance(frame, LLMFullResponseEndFrame) and self._pending_tool_signature:
-            current_sig = _latest_tool_result_signature(self._context.messages)
-            if current_sig != self._pending_tool_signature:
-                self._pending_tool_signature = None
-                await self.push_frame(frame, direction)
-                return
-
-            self._last_continued_signature = self._pending_tool_signature
-            self._pending_tool_signature = None
+        if isinstance(frame, LLMFullResponseEndFrame) and self._pending_tool_result:
+            self._pending_tool_result = False
             await self.push_frame(LLMMessagesFrame(self._context.messages))
             return
 
@@ -1224,6 +1261,18 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         call_log.log_tool_call("my_playlists", {}, result)
         await params.result_callback(result)
 
+    async def on_get_artist_top_tracks(params: FunctionCallParams):
+        artist_id = params.arguments.get("artist_id", "")
+        result = await spotify.get_artist_top_tracks(artist_id)
+        call_log.log_tool_call("get_artist_top_tracks", params.arguments, result)
+        await params.result_callback(result)
+
+    async def on_get_artist_albums(params: FunctionCallParams):
+        artist_id = params.arguments.get("artist_id", "")
+        result = await spotify.get_artist_albums(artist_id)
+        call_log.log_tool_call("get_artist_albums", params.arguments, result)
+        await params.result_callback(result)
+
     llm.register_function("research_vibe", on_research_vibe)
     llm.register_function("search_spotify", on_search_spotify)
     llm.register_function("play_context", on_play_context)
@@ -1237,6 +1286,8 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     llm.register_function("now_playing", on_now_playing)
     llm.register_function("get_recommendations", on_get_recommendations)
     llm.register_function("my_playlists", on_my_playlists)
+    llm.register_function("get_artist_top_tracks", on_get_artist_top_tracks)
+    llm.register_function("get_artist_albums", on_get_artist_albums)
 
     # Silence watchdog
     SILENCE_TIMEOUT = 30.0
