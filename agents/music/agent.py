@@ -39,6 +39,7 @@ from pipecat.frames.frames import (
     Frame,
     InputAudioRawFrame,
     InterruptionFrame,
+    LLMFullResponseEndFrame,
     LLMMessagesFrame,
     OutputAudioRawFrame,
     StartFrame,
@@ -883,6 +884,53 @@ class AudioSocketTransport(BaseTransport):
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _is_tool_result_message(msg: object) -> bool:
+    if not isinstance(msg, dict) or msg.get("role") != "user":
+        return False
+    content = msg.get("content")
+    if not isinstance(content, list):
+        return False
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "tool_result":
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Tool Continuation Processor
+# ---------------------------------------------------------------------------
+
+class ToolContinuationProcessor(FrameProcessor):
+    """
+    After a tool result is added to context and the LLM finishes its turn,
+    re-push LLMMessagesFrame so the LLM continues without waiting for user input.
+    """
+
+    def __init__(self, context, **kwargs):
+        super().__init__(**kwargs)
+        self._context = context
+        self._pending_tool_result = False
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+
+        if isinstance(frame, LLMMessagesFrame):
+            msgs = self._context.messages
+            if msgs and _is_tool_result_message(msgs[-1]):
+                self._pending_tool_result = True
+
+        if isinstance(frame, LLMFullResponseEndFrame) and self._pending_tool_result:
+            self._pending_tool_result = False
+            await self.push_frame(LLMMessagesFrame(self._context.messages))
+            return
+
+        await self.push_frame(frame, direction)
+
+
+# ---------------------------------------------------------------------------
 # Call handler
 # ---------------------------------------------------------------------------
 
@@ -1040,17 +1088,6 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     MAX_CONTEXT_MESSAGES = 12
     KEEP_ON_SLEEP = 6
 
-    def _is_tool_result_message(msg: object) -> bool:
-        if not isinstance(msg, dict) or msg.get("role") != "user":
-            return False
-        content = msg.get("content")
-        if not isinstance(content, list):
-            return False
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "tool_result":
-                return True
-        return False
-
     def _trim_context_messages(msgs: list, max_messages: int) -> list:
         trimmed = [msgs[0]] + msgs[-max_messages:]
         while len(trimmed) > 1 and _is_tool_result_message(trimmed[1]):
@@ -1123,6 +1160,8 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
 
     watchdog = SilenceWatchdog(name="SilenceWatchdog")
 
+    tool_continuation = ToolContinuationProcessor(context, name="ToolContinuation")
+
     pipeline = Pipeline([
         transport.input(),
         stt,
@@ -1130,6 +1169,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         watchdog,
         context_aggregator.user(),
         llm,
+        tool_continuation,
         assistant_logger,
         tts,
         transport.output(),
