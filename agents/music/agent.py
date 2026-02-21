@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import asyncio
+import hashlib
+import json
 import os
 import struct
 import subprocess
@@ -1010,6 +1012,32 @@ def _is_tool_result_message(msg: object) -> bool:
     return False
 
 
+def _latest_tool_result_signature(messages: list[object]) -> Optional[str]:
+    """Stable signature for the most recent tool_result message in context."""
+    for msg in reversed(messages):
+        if not _is_tool_result_message(msg):
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+
+        parts: list[str] = []
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "tool_result":
+                continue
+            tool_use_id = block.get("tool_use_id")
+            if isinstance(tool_use_id, str) and tool_use_id:
+                parts.append(f"id:{tool_use_id}")
+                continue
+            normalized = json.dumps(block, ensure_ascii=False, sort_keys=True)
+            digest = hashlib.sha1(normalized.encode("utf-8")).hexdigest()
+            parts.append(f"sha1:{digest}")
+
+        if parts:
+            return "|".join(parts)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Tool Continuation Processor
 # ---------------------------------------------------------------------------
@@ -1023,18 +1051,27 @@ class ToolContinuationProcessor(FrameProcessor):
     def __init__(self, context, **kwargs):
         super().__init__(**kwargs)
         self._context = context
-        self._pending_tool_result = False
+        self._pending_tool_signature: Optional[str] = None
+        self._last_continued_signature: Optional[str] = None
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, LLMMessagesFrame):
             msgs = self._context.messages
-            if msgs and _is_tool_result_message(msgs[-1]):
-                self._pending_tool_result = True
+            tool_sig = _latest_tool_result_signature(msgs)
+            if tool_sig and tool_sig != self._last_continued_signature:
+                self._pending_tool_signature = tool_sig
 
-        if isinstance(frame, LLMFullResponseEndFrame) and self._pending_tool_result:
-            self._pending_tool_result = False
+        if isinstance(frame, LLMFullResponseEndFrame) and self._pending_tool_signature:
+            current_sig = _latest_tool_result_signature(self._context.messages)
+            if current_sig != self._pending_tool_signature:
+                self._pending_tool_signature = None
+                await self.push_frame(frame, direction)
+                return
+
+            self._last_continued_signature = self._pending_tool_signature
+            self._pending_tool_signature = None
             await self.push_frame(LLMMessagesFrame(self._context.messages))
             return
 
