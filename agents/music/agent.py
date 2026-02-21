@@ -147,6 +147,11 @@ Do NOT describe what you found and wait. The caller asked you to do \
 something, so do it. Search then act, always, in the same turn. Never say \
 "I found it, want me to play it?" — just play it. One fluid motion, dude.
 
+Never play or queue an entire artist (spotify:artist:xxx) unless the caller \
+explicitly asks to hear everything by that artist. Instead, pick a specific \
+album or track — choose the best entry point with intention. An artist URI \
+just shuffles their whole catalog randomly, which is a bad listen.
+
 Telephone STT quirks: Spelled-out numbers like "nineteen ninety nine" should \
 be searched as digits. Phonetic mishearings are common — if a search comes \
 back empty or wrong, think about what the caller might have actually said and \
@@ -232,7 +237,7 @@ TOOLS = [
     },
     {
         "name": "play_context",
-        "description": "Play a Spotify album, playlist, or artist. Enables shuffle for playlists.",
+        "description": "Play a Spotify album or playlist. Avoid artist URIs (spotify:artist:xxx) unless explicitly requested — prefer a specific album URI instead.",
         "input_schema": {
             "type": "object",
             "properties": {
