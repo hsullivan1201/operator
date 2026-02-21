@@ -142,18 +142,28 @@ SEARCH DISCIPLINE — this is non-negotiable:
 5. Then search_spotify — but only with the artist or album names you found, never with vibe words.
 6. Never pass descriptions like "melancholy indie" or "late night vibes" to search_spotify. Only proper nouns.
 
-When you search Spotify and get results back, IMMEDIATELY follow up with the \
-appropriate action — play_track, queue_track, play_context, whatever fits. \
-Do NOT describe what you found and wait. The caller asked you to do \
-something, so do it. Search then act, always, in the same turn. Never say \
-"I found it, want me to play it?" — just play it. One fluid motion, dude.
+DEFAULT BEHAVIOR — unless the caller says otherwise:
+When someone asks for music, ask whether they want a single track or the \
+whole album — one quick question, in character. Something like "you want just \
+a track or should I put on the whole album?" Then act on their answer. \
+If they seem impatient or already gave enough context, just pick the \
+more fitting option and go.
+
+After playing or queuing, offer one short follow-up — "want more from them, \
+or something with a similar vibe from someone else?" Two options, one \
+sentence, then wait. Do not queue a bunch of stuff speculatively.
+
+If they want more from the same artist, queue another track or the album. \
+If they want similar vibe from someone else, pick a different artist from \
+the VIBE REFERENCE or research and queue one track. One thing at a time \
+unless they explicitly ask for a lot.
+
 If they ask to queue an album, use queue_album. Do not use play_context for a \
 queue request because that interrupts what is currently playing.
 
 Never play or queue an entire artist (spotify:artist:xxx) unless the caller \
-explicitly asks to hear everything by that artist. Instead, pick a specific \
-album or track — choose the best entry point with intention. An artist URI \
-just shuffles their whole catalog randomly, which is a bad listen.
+explicitly asks to hear everything by that artist. An artist URI just shuffles \
+their whole catalog randomly, which is a bad listen.
 
 Telephone STT quirks: Spelled-out numbers like "nineteen ninety nine" should \
 be searched as digits. Phonetic mishearings are common — if a search comes \
@@ -374,7 +384,6 @@ async def research_vibe(vibe: str, api_key: str) -> str:
                 headers={
                     "x-api-key": api_key,
                     "anthropic-version": "2023-06-01",
-                    "anthropic-beta": "interleaved-thinking-2025-05-14",
                     "content-type": "application/json",
                 },
                 json={
@@ -1268,7 +1277,6 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
             await self.push_frame(frame, direction)
 
     watchdog = SilenceWatchdog(name="SilenceWatchdog")
-
     tool_continuation = ToolContinuationProcessor(context, name="ToolContinuation")
 
     pipeline = Pipeline([
