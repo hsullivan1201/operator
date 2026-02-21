@@ -147,6 +147,8 @@ appropriate action — play_track, queue_track, play_context, whatever fits. \
 Do NOT describe what you found and wait. The caller asked you to do \
 something, so do it. Search then act, always, in the same turn. Never say \
 "I found it, want me to play it?" — just play it. One fluid motion, dude.
+If they ask to queue an album, use queue_album. Do not use play_context for a \
+queue request because that interrupts what is currently playing.
 
 Never play or queue an entire artist (spotify:artist:xxx) unless the caller \
 explicitly asks to hear everything by that artist. Instead, pick a specific \
@@ -266,13 +268,27 @@ TOOLS = [
     },
     {
         "name": "queue_track",
-        "description": "Add a track to the queue without interrupting current playback.",
+        "description": "Add a single track to the queue without interrupting current playback. Use queue_album for album URIs.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "uri": {
                     "type": "string",
                     "description": "Spotify track URI to add to queue",
+                },
+            },
+            "required": ["uri"],
+        },
+    },
+    {
+        "name": "queue_album",
+        "description": "Queue every track from an album without interrupting current playback.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "uri": {
+                    "type": "string",
+                    "description": "Spotify album URI (e.g. spotify:album:xxx)",
                 },
             },
             "required": ["uri"],
@@ -438,6 +454,13 @@ class SpotifyClient:
     @staticmethod
     def _clamp(text: str, limit: int) -> str:
         return text if len(text) <= limit else text[:limit] + "..."
+
+    @staticmethod
+    def _parse_spotify_uri(uri: str) -> tuple[Optional[str], Optional[str]]:
+        parts = uri.split(":")
+        if len(parts) != 3 or parts[0] != "spotify":
+            return None, None
+        return parts[1], parts[2]
 
     async def _get_token(self) -> str:
         if self._access_token and time.time() < self._token_expires:
@@ -608,6 +631,58 @@ class SpotifyClient:
             return f"Play failed: {resp.status_code} {resp.text}"
         return "Playing."
 
+    async def _queue_uri(self, uri: str, device_id: str) -> tuple[bool, Optional[str], Optional[str]]:
+        current_device_id = device_id
+        for attempt in range(3):
+            resp = await self._api(
+                "POST",
+                "/me/player/queue",
+                params={"uri": uri, "device_id": current_device_id},
+            )
+            if resp.status_code in (200, 204):
+                return True, current_device_id, None
+            if resp.status_code == 404 and attempt == 0:
+                recovered = await self._recover_device_after_404()
+                if not recovered:
+                    return False, None, "Spotify device not found. Is librespot running?"
+                current_device_id = recovered
+                continue
+            if resp.status_code == 429 and attempt < 2:
+                retry_after = int(resp.headers.get("Retry-After", "1") or 1)
+                await asyncio.sleep(max(1, min(retry_after, 8)))
+                continue
+            return False, current_device_id, f"{resp.status_code} {self._clamp(resp.text, 120)}"
+        return False, current_device_id, "429 rate limited"
+
+    async def _album_track_uris(self, album_uri: str) -> tuple[list[str], Optional[str]]:
+        uri_type, album_id = self._parse_spotify_uri(album_uri)
+        if uri_type != "album" or not album_id:
+            return [], "That is not a Spotify album URI."
+
+        uris: list[str] = []
+        path = f"/albums/{album_id}/tracks"
+        params = {"limit": 50}
+
+        while path:
+            resp = await self._api("GET", path, params=params)
+            if resp.status_code != 200:
+                return [], f"Failed to fetch album tracks: {resp.status_code} {self._clamp(resp.text, 120)}"
+
+            data = resp.json()
+            for item in data.get("items", []):
+                track_uri = item.get("uri")
+                if track_uri:
+                    uris.append(track_uri)
+
+            next_url = data.get("next")
+            if next_url and next_url.startswith(self.API_BASE):
+                path = next_url[len(self.API_BASE):]
+                params = None
+            else:
+                path = None
+
+        return uris, None
+
     async def now_playing(self) -> str:
         resp = await self._api("GET", "/me/player/currently-playing")
         if resp.status_code == 204 or not resp.text:
@@ -627,13 +702,40 @@ class SpotifyClient:
         return result
 
     async def queue_track(self, uri: str) -> str:
+        uri_type, _ = self._parse_spotify_uri(uri)
+        if uri_type == "album":
+            return await self.queue_album(uri)
+        if uri_type and uri_type != "track":
+            return "queue_track only supports track URIs. Use queue_album for albums."
+
         device_id = await self._ensure_device_id()
         if not device_id:
             return "Spotify device not found. Is librespot running?"
-        resp = await self._api("POST", f"/me/player/queue?uri={uri}&device_id={device_id}")
-        if resp.status_code not in (200, 204):
-            return f"Queue failed: {resp.status_code}"
+        ok, _, err = await self._queue_uri(uri, device_id)
+        if not ok:
+            return f"Queue failed: {err}"
         return "Added to queue."
+
+    async def queue_album(self, uri: str) -> str:
+        device_id = await self._ensure_device_id()
+        if not device_id:
+            return "Spotify device not found. Is librespot running?"
+
+        track_uris, err = await self._album_track_uris(uri)
+        if err:
+            return err
+        if not track_uris:
+            return "No tracks found for that album."
+
+        queued = 0
+        current_device_id = device_id
+        for track_uri in track_uris:
+            ok, current_device_id, queue_err = await self._queue_uri(track_uri, current_device_id)
+            if not ok:
+                return f"Queued {queued} of {len(track_uris)} album tracks before failure: {queue_err}"
+            queued += 1
+
+        return f"Queued all {queued} tracks from that album."
 
     async def next_track(self) -> str:
         device_id = await self._ensure_device_id()
@@ -1033,6 +1135,12 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         call_log.log_tool_call("queue_track", params.arguments, result)
         await params.result_callback(result)
 
+    async def on_queue_album(params: FunctionCallParams):
+        uri = params.arguments.get("uri", "")
+        result = await spotify.queue_album(uri)
+        call_log.log_tool_call("queue_album", params.arguments, result)
+        await params.result_callback(result)
+
     async def on_next_track(params: FunctionCallParams):
         result = await spotify.next_track()
         call_log.log_tool_call("next_track", {}, result)
@@ -1075,6 +1183,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     llm.register_function("play_context", on_play_context)
     llm.register_function("play_track", on_play_track)
     llm.register_function("queue_track", on_queue_track)
+    llm.register_function("queue_album", on_queue_album)
     llm.register_function("next_track", on_next_track)
     llm.register_function("prev_track", on_prev_track)
     llm.register_function("pause_playback", on_pause_playback)
