@@ -25,7 +25,8 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from call_log import CallLog, make_transcript_logger
+from call_id import parse_audiosocket_uuid
+from call_log import CallLog, make_assistant_logger, make_transcript_logger
 
 import httpx
 
@@ -73,6 +74,8 @@ MSG_AUDIO = 0x10
 MSG_ERROR = 0x11
 
 ASTERISK_RATE = 8000
+MAX_SEARCH_PAYLOAD_CHARS = 1800
+MAX_PLAYLIST_PAYLOAD_CHARS = 1800
 
 SYSTEM_PROMPT = """\
 You are DJ Cool, the music concierge on the Telephone network. You are an \
@@ -114,6 +117,13 @@ comes back empty or wrong, think about what the caller might have actually said 
 and try alternate spellings or shorter queries. Drop filler words and articles \
 to keep searches tight. If you know the song or artist they mean, just search \
 for what you know it's called, not what the transcription says.
+
+IMPORTANT: When you search Spotify and get results back, IMMEDIATELY follow up \
+with the appropriate action — play_track, queue_track, play_context, whatever \
+fits. Do NOT just describe what you found and wait. The caller asked you to do \
+something, so do it. Search then act, always, in the same turn. Never say \
+"I found it, want me to play it?" — just play it. If they asked you to queue \
+something, search and then queue it. One fluid motion, dude.
 
 You can also skip tracks, go back, pause, resume, and tell the caller what's \
 currently playing.
@@ -293,6 +303,11 @@ class SpotifyClient:
         self._device_name = device_name
         self._access_token: Optional[str] = None
         self._token_expires: float = 0
+        self._last_device_id: Optional[str] = None
+
+    @staticmethod
+    def _clamp(text: str, limit: int) -> str:
+        return text if len(text) <= limit else text[:limit] + "..."
 
     async def _get_token(self) -> str:
         if self._access_token and time.time() < self._token_expires:
@@ -326,16 +341,32 @@ class SpotifyClient:
         return resp
 
     async def _get_device_id(self) -> Optional[str]:
-        resp = await self._api("GET", "/me/player/devices")
-        if resp.status_code != 200:
+        for attempt in range(2):
+            resp = await self._api("GET", "/me/player/devices")
+            if resp.status_code == 200:
+                break
+            if resp.status_code == 429 and attempt == 0:
+                retry_after = int(resp.headers.get("Retry-After", "1") or 1)
+                await asyncio.sleep(max(1, min(retry_after, 5)))
+                continue
+            logger.warning(
+                f"Spotify devices lookup failed: status={resp.status_code} body={resp.text[:120]}"
+            )
             return None
+
         for dev in resp.json().get("devices", []):
-            if dev.get("name") == self._device_name:
+            if dev.get("name") == self._device_name and not dev.get("is_restricted", False):
+                self._last_device_id = dev["id"]
                 return dev["id"]
         return None
 
-    async def ensure_librespot(self):
-        """Start librespot if not running. Does NOT activate or transfer playback."""
+    async def ensure_librespot(self, force_restart: bool = False) -> Optional[str]:
+        """Ensure librespot is running and the Spotify device is visible."""
+        if force_restart:
+            logger.info("Restarting librespot...")
+            subprocess.run(["pkill", "-x", "librespot"], capture_output=True)
+            await asyncio.sleep(0.5)
+
         result = subprocess.run(["pgrep", "-x", "librespot"], capture_output=True)
         if result.returncode != 0:
             logger.info("Starting librespot...")
@@ -345,16 +376,30 @@ class SpotifyClient:
                  "-c", str(Path.home() / ".cache/librespot")],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
-            # Wait for device to register with Spotify
-            for _ in range(5):
-                await asyncio.sleep(1)
-                device_id = await self._get_device_id()
-                if device_id:
-                    logger.info(f"Librespot ready, device_id={device_id}")
-                    return
-            logger.warning("Librespot started but device not found")
         else:
             logger.info("Librespot already running")
+
+        # Wait for device to register with Spotify.
+        for _ in range(8):
+            await asyncio.sleep(1)
+            device_id = await self._get_device_id()
+            if device_id:
+                logger.info(f"Librespot ready, device_id={device_id}")
+                return device_id
+
+        logger.warning("Librespot running but device not found")
+        return None
+
+    async def _ensure_device_id(self) -> Optional[str]:
+        device_id = await self._get_device_id()
+        if device_id:
+            return device_id
+        logger.warning("Spotify device missing; attempting one-time librespot restart")
+        return await self.ensure_librespot(force_restart=True)
+
+    async def _recover_device_after_404(self) -> Optional[str]:
+        logger.warning("Spotify returned device-related error; restarting librespot and retrying")
+        return await self.ensure_librespot(force_restart=True)
 
     async def search(self, query: str, types: str = "track,album,artist,playlist") -> str:
         resp = await self._api("GET", "/search", params={"q": query, "type": types, "limit": 5})
@@ -384,10 +429,11 @@ class SpotifyClient:
                 owner = item.get("owner", {}).get("display_name", "Unknown")
                 lines.append(f"Playlist: {item['name']} by {owner} ({item.get('tracks', {}).get('total', '?')} tracks) — uri: {item['uri']}")
 
-        return "\n".join(lines) if lines else "No results found."
+        payload = "\n".join(lines) if lines else "No results found."
+        return self._clamp(payload, MAX_SEARCH_PAYLOAD_CHARS)
 
     async def play_context(self, uri: str) -> str:
-        device_id = await self._get_device_id()
+        device_id = await self._ensure_device_id()
         if not device_id:
             return "Spotify device not found. Is librespot running?"
 
@@ -395,6 +441,14 @@ class SpotifyClient:
             "PUT", f"/me/player/play?device_id={device_id}",
             json={"context_uri": uri},
         )
+        if resp.status_code == 404:
+            device_id = await self._recover_device_after_404()
+            if not device_id:
+                return "Spotify device not found. Is librespot running?"
+            resp = await self._api(
+                "PUT", f"/me/player/play?device_id={device_id}",
+                json={"context_uri": uri},
+            )
         if resp.status_code not in (200, 204):
             return f"Play failed: {resp.status_code} {resp.text}"
 
@@ -407,7 +461,7 @@ class SpotifyClient:
         return "Playing."
 
     async def play_tracks(self, uris: list[str]) -> str:
-        device_id = await self._get_device_id()
+        device_id = await self._ensure_device_id()
         if not device_id:
             return "Spotify device not found. Is librespot running?"
 
@@ -415,6 +469,14 @@ class SpotifyClient:
             "PUT", f"/me/player/play?device_id={device_id}",
             json={"uris": uris},
         )
+        if resp.status_code == 404:
+            device_id = await self._recover_device_after_404()
+            if not device_id:
+                return "Spotify device not found. Is librespot running?"
+            resp = await self._api(
+                "PUT", f"/me/player/play?device_id={device_id}",
+                json={"uris": uris},
+            )
         if resp.status_code not in (200, 204):
             return f"Play failed: {resp.status_code} {resp.text}"
         return "Playing."
@@ -438,7 +500,7 @@ class SpotifyClient:
         return result
 
     async def queue_track(self, uri: str) -> str:
-        device_id = await self._get_device_id()
+        device_id = await self._ensure_device_id()
         if not device_id:
             return "Spotify device not found. Is librespot running?"
         resp = await self._api("POST", f"/me/player/queue?uri={uri}&device_id={device_id}")
@@ -447,28 +509,36 @@ class SpotifyClient:
         return "Added to queue."
 
     async def next_track(self) -> str:
-        device_id = await self._get_device_id()
+        device_id = await self._ensure_device_id()
+        if not device_id:
+            return "Spotify device not found. Is librespot running?"
         resp = await self._api("POST", f"/me/player/next?device_id={device_id}")
         if resp.status_code not in (200, 204):
             return f"Skip failed: {resp.status_code}"
         return "Skipped to next track."
 
     async def prev_track(self) -> str:
-        device_id = await self._get_device_id()
+        device_id = await self._ensure_device_id()
+        if not device_id:
+            return "Spotify device not found. Is librespot running?"
         resp = await self._api("POST", f"/me/player/previous?device_id={device_id}")
         if resp.status_code not in (200, 204):
             return f"Previous failed: {resp.status_code}"
         return "Went back to previous track."
 
     async def pause(self) -> str:
-        device_id = await self._get_device_id()
+        device_id = await self._ensure_device_id()
+        if not device_id:
+            return "Spotify device not found. Is librespot running?"
         resp = await self._api("PUT", f"/me/player/pause?device_id={device_id}")
         if resp.status_code not in (200, 204):
             return f"Pause failed: {resp.status_code}"
         return "Paused."
 
     async def resume(self) -> str:
-        device_id = await self._get_device_id()
+        device_id = await self._ensure_device_id()
+        if not device_id:
+            return "Spotify device not found. Is librespot running?"
         resp = await self._api("PUT", f"/me/player/play?device_id={device_id}")
         if resp.status_code not in (200, 204):
             return f"Resume failed: {resp.status_code}"
@@ -507,11 +577,11 @@ class SpotifyClient:
         if not items:
             return "No playlists found."
         lines = []
-        for p in items:
+        for p in items[:10]:
             name = p.get("name", "Untitled")
             total = p.get("tracks", {}).get("total", "?")
             lines.append(f"{name} ({total} tracks) — uri: {p['uri']}")
-        return "\n".join(lines)
+        return self._clamp("\n".join(lines), MAX_PLAYLIST_PAYLOAD_CHARS)
 
 
 def _load_spotify_config() -> SpotifyClient:
@@ -701,7 +771,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         msg_len = struct.unpack(">H", header[1:3])[0]
         payload = await reader.readexactly(msg_len) if msg_len > 0 else b""
         if msg_type == MSG_UUID:
-            call_uuid = payload.decode("utf-8", errors="replace").strip("\x00")
+            call_uuid = parse_audiosocket_uuid(payload)
             logger.info(f"Call UUID: {call_uuid}")
     except Exception as e:
         logger.error(f"Failed to read UUID: {e}")
@@ -756,6 +826,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         tools=TOOLS,
     )
     context_aggregator = llm.create_context_aggregator(context)
+    assistant_logger = make_assistant_logger(call_log)
 
     # -- Tool handlers --
 
@@ -839,6 +910,32 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     MAX_CONTEXT_MESSAGES = 12
     KEEP_ON_SLEEP = 6  # user/assistant messages to preserve across sleep
 
+    def _is_tool_result_message(msg: object) -> bool:
+        if not isinstance(msg, dict) or msg.get("role") != "user":
+            return False
+        content = msg.get("content")
+        if not isinstance(content, list):
+            return False
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                return True
+        return False
+
+    def _trim_context_messages(msgs: list, max_messages: int) -> list:
+        trimmed = [msgs[0]] + msgs[-max_messages:]
+        # If trim splits a tool_use/tool_result pair, drop orphan tool_result.
+        while len(trimmed) > 1 and _is_tool_result_message(trimmed[1]):
+            trimmed.pop(1)
+        return trimmed
+
+    def _sanitize_context_slice(msgs: list) -> list:
+        sanitized = list(msgs)
+        # If we begin with a tool_result, its paired tool_use was trimmed away.
+        # Drop leading orphan tool_result messages to keep Anthropic happy.
+        while sanitized and _is_tool_result_message(sanitized[0]):
+            sanitized.pop(0)
+        return sanitized
+
     class SilenceWatchdog(FrameProcessor):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
@@ -873,7 +970,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
                         "This call is already in progress. You already greeted the caller — just pick up naturally."
                     )
                     msgs.append({"role": "user", "content": "[" + " | ".join(state_parts) + "]"})
-                    msgs.extend(self._saved_context)
+                    msgs.extend(_sanitize_context_slice(self._saved_context))
                     context.set_messages(msgs)
                     self._saved_context = []
                     self._asleep = False
@@ -883,7 +980,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
                 # Trim context
                 msgs = context.messages
                 if len(msgs) > MAX_CONTEXT_MESSAGES + 1:
-                    context.set_messages([msgs[0]] + msgs[-(MAX_CONTEXT_MESSAGES):])
+                    context.set_messages(_trim_context_messages(msgs, MAX_CONTEXT_MESSAGES))
 
                 # Check silence timeout — don't send to LLM if asleep
                 if self._asleep:
@@ -895,7 +992,8 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
                     logger.info(f"Silence for {elapsed:.0f}s, going to sleep")
                     # Save recent exchanges before sleeping
                     msgs = context.messages
-                    self._saved_context = msgs[-(KEEP_ON_SLEEP):] if len(msgs) > KEEP_ON_SLEEP else msgs[1:]
+                    tail = msgs[-(KEEP_ON_SLEEP):] if len(msgs) > KEEP_ON_SLEEP else msgs[1:]
+                    self._saved_context = _sanitize_context_slice(tail)
                     context.set_messages([msgs[0]])
                     self._asleep = True
 
@@ -910,6 +1008,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         watchdog,
         context_aggregator.user(),
         llm,
+        assistant_logger,
         tts,
         transport.output(),
         context_aggregator.assistant(),
@@ -918,6 +1017,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     task = PipelineTask(
         pipeline,
         params=PipelineParams(allow_interruptions=True, enable_metrics=False),
+        idle_timeout_secs=None,
     )
 
     greeting = "Yooo, DJ Cool here. What are we vibing to?"

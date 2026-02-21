@@ -25,7 +25,13 @@ import time
 import wave
 from typing import AsyncGenerator, Optional
 
-from call_log import CallLog, make_transcript_logger
+from call_id import find_audiosocket_channel, parse_audiosocket_uuid
+from call_log import (
+    CallLog,
+    make_assistant_logger,
+    make_context_window_guard,
+    make_transcript_logger,
+)
 
 import httpx
 import numpy as np
@@ -95,8 +101,6 @@ say is read aloud by a speech synthesizer.
 
 If you don't understand, say "I'm sorry, could you repeat that?" \
 Never guess at unclear requests.
-
-The current date and time is {now}.
 
 ABOUT INFOLINE
 
@@ -293,6 +297,75 @@ TOOLS = [
         },
     }
 ]
+
+TEST_EXTENSIONS = {"101", "102", "103", "104", "105"}
+SPECIALIST_EXTENSIONS = {"200", "201", "202", "203", "204", "205"}
+
+
+def _extract_latest_user_text(context: OpenAILLMContext) -> str:
+    """Best-effort latest user utterance from context for transfer sanity checks."""
+    for msg in reversed(getattr(context, "messages", [])):
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            text = content.strip()
+            if text and len(text) < 400:
+                return text
+        elif isinstance(content, list):
+            parts = [
+                block.get("text", "").strip()
+                for block in content
+                if block.get("type") == "text" and block.get("text", "").strip()
+            ]
+            if parts:
+                text = " ".join(parts).strip()
+                if len(text) < 400:
+                    return text
+    return ""
+
+
+def _looks_like_explicit_test_request(text: str) -> bool:
+    t = text.lower()
+    keywords = [
+        "test",
+        "echo",
+        "dtmf",
+        "music on hold",
+        "hello world",
+        "congratulations",
+        "extension 101",
+        "extension 102",
+        "extension 103",
+        "extension 104",
+        "extension 105",
+        "one oh one",
+        "one oh two",
+        "one oh three",
+        "one oh four",
+        "one oh five",
+    ]
+    return any(k in t for k in keywords)
+
+
+def _specialist_intent_extension(text: str) -> Optional[str]:
+    """Map obvious specialist intents to their canonical extensions."""
+    t = text.lower()
+
+    if any(k in t for k in ["daily briefing", "morning briefing", "briefing", "news summary"]):
+        return "204"
+    if any(k in t for k in ["dj cool", "music concierge", "spotify"]):
+        return "205"
+    if any(k in t for k in ["chef", "cooking", "recipe", "cook"]):
+        return "200"
+    if any(k in t for k in ["librarian", "book", "reading recommendation", "reference desk"]):
+        return "202"
+    if any(k in t for k in ["french", "français", "quebec", "québec"]):
+        return "203"
+    if any(k in t for k in ["fun fact", "facts", "story", "stories"]):
+        return "201"
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -574,21 +647,21 @@ class TransferWatcher(FrameProcessor):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.pending_transfer: Optional[str] = None
+        self.pending_transfer: Optional[tuple[str, str]] = None
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
         if isinstance(frame, BotStoppedSpeakingFrame) and self.pending_transfer:
-            ext = self.pending_transfer
+            ext, call_uuid = self.pending_transfer
             self.pending_transfer = None
-            asyncio.create_task(_delayed_transfer(ext, delay=0.5))
+            asyncio.create_task(_delayed_transfer(ext, call_uuid, delay=0.5))
         await self.push_frame(frame, direction)
 
 
-async def _delayed_transfer(ext: str, delay: float = 5):
+async def _delayed_transfer(ext: str, call_uuid: str, delay: float = 5):
     """Wait for goodbye TTS to finish, then redirect the Asterisk channel."""
     await asyncio.sleep(delay)
-    await do_transfer(ext)
+    await do_transfer(ext, call_uuid)
 
 
 async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
@@ -603,7 +676,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         msg_len = struct.unpack(">H", header[1:3])[0]
         payload = await reader.readexactly(msg_len) if msg_len > 0 else b""
         if msg_type == MSG_UUID:
-            call_uuid = payload.decode("utf-8", errors="replace").strip("\x00")
+            call_uuid = parse_audiosocket_uuid(payload)
             logger.info(f"Call UUID: {call_uuid}")
     except Exception as e:
         logger.error(f"Failed to read UUID: {e}")
@@ -657,30 +730,58 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     )
 
     # -- Context --
-    now = time.strftime("%A, %B %d, %Y at %I:%M %p")
     context = OpenAILLMContext(
-        messages=[{"role": "system", "content": SYSTEM_PROMPT.format(now=now)}],
+        messages=[{"role": "system", "content": SYSTEM_PROMPT}],
         tools=TOOLS,
     )
     context_aggregator = llm.create_context_aggregator(context)
+    context_window = make_context_window_guard(context, max_messages=12)
+    assistant_logger = make_assistant_logger(call_log)
 
     # -- Transfer watcher --
     transfer_watcher = TransferWatcher(name="TransferWatcher")
 
     # -- Tool: transfer_call --
     async def on_transfer_call(params: FunctionCallParams):
-        ext = params.arguments.get("extension", "")
-        valid = {str(n) for n in range(101, 106)} | {str(n) for n in range(200, 206)} | {str(n) for n in range(700, 719)} | {"730"} | {str(n) for n in range(800, 812)}
+        ext = str(params.arguments.get("extension", "")).strip()
+        valid = (
+            TEST_EXTENSIONS
+            | SPECIALIST_EXTENSIONS
+            | {str(n) for n in range(700, 719)}
+            | {"730"}
+            | {str(n) for n in range(800, 812)}
+        )
+
+        # Guardrail: if the LLM accidentally picks a 1xx test channel for a
+        # clearly specialist intent ("daily briefing", "DJ Cool", etc.),
+        # remap to the specialist extension.
+        latest_user_text = _extract_latest_user_text(context)
+        inferred_specialist = _specialist_intent_extension(latest_user_text)
+        if (
+            ext in TEST_EXTENSIONS
+            and inferred_specialist
+            and not _looks_like_explicit_test_request(latest_user_text)
+        ):
+            logger.warning(
+                "transfer_call remap: %s -> %s (user=%r)",
+                ext,
+                inferred_specialist,
+                latest_user_text,
+            )
+            ext = inferred_specialist
+
+        tool_args = dict(params.arguments)
+        tool_args["extension"] = ext
         if ext not in valid:
             result = f"Invalid extension {ext}. Valid: {', '.join(sorted(valid))}"
-            call_log.log_tool_call("transfer_call", params.arguments, result)
+            call_log.log_tool_call("transfer_call", tool_args, result)
             await params.result_callback(result)
             return
         result = f"Transferring to extension {ext}."
-        call_log.log_tool_call("transfer_call", params.arguments, result)
+        call_log.log_tool_call("transfer_call", tool_args, result)
         await params.result_callback(result)
         # TransferWatcher will do the redirect when bot finishes speaking.
-        transfer_watcher.pending_transfer = ext
+        transfer_watcher.pending_transfer = (ext, call_uuid)
 
     llm.register_function("transfer_call", on_transfer_call)
 
@@ -690,8 +791,10 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
             transport.input(),
             stt,
             make_transcript_logger(call_log),
+            context_window,
             context_aggregator.user(),
             llm,
+            assistant_logger,
             tts,
             transport.output(),
             transfer_watcher,
@@ -705,6 +808,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
             allow_interruptions=True,
             enable_metrics=False,
         ),
+        idle_timeout_secs=None,
     )
 
     # Queue greeting
@@ -733,7 +837,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     logger.info("Call ended\n")
 
 
-async def do_transfer(extension: str):
+async def do_transfer(extension: str, call_uuid: str):
     """Redirect the Asterisk channel to another extension."""
     proc = await asyncio.create_subprocess_exec(
         "sudo", "asterisk", "-rx", "core show channels concise",
@@ -741,14 +845,10 @@ async def do_transfer(extension: str):
         stderr=asyncio.subprocess.PIPE,
     )
     stdout, _ = await proc.communicate()
-    channel_name = None
-    for line in stdout.decode().splitlines():
-        if "PJSIP/100-" in line and "AudioSocket" in line:
-            channel_name = line.split("!")[0]
-            break
+    channel_name = find_audiosocket_channel(stdout.decode(errors="replace"), call_uuid)
 
     if not channel_name:
-        logger.error("Transfer failed: could not find active channel")
+        logger.error(f"Transfer failed: could not find active channel for UUID {call_uuid}")
         return
 
     logger.info(f"Redirecting {channel_name} → extension {extension}")

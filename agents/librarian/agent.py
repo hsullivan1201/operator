@@ -20,8 +20,18 @@ import re
 import struct
 import sys
 import time
-from typing import Optional
 from html import unescape
+from pathlib import Path
+from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from call_id import parse_audiosocket_uuid
+from call_log import (
+    CallLog,
+    make_assistant_logger,
+    make_context_window_guard,
+    make_transcript_logger,
+)
 
 import httpx
 from loguru import logger
@@ -147,6 +157,14 @@ TOOLS = [
 ]
 
 _TAG_RE = re.compile(r"<[^>]+>")
+MAX_SEARCH_RESULTS = 3
+MAX_SNIPPET_CHARS = 180
+MAX_FETCH_CHARS = 1800
+MAX_TOOL_PAYLOAD_CHARS = 2200
+
+
+def _clamp(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[:limit] + "..."
 
 async def _web_search(query: str) -> str:
     """Search DuckDuckGo HTML and return top results."""
@@ -166,10 +184,12 @@ async def _web_search(query: str) -> str:
                 url = unescape(match.group(1))
                 title = _TAG_RE.sub("", unescape(match.group(2))).strip()
                 snippet = _TAG_RE.sub("", unescape(match.group(3))).strip()
+                snippet = _clamp(snippet, MAX_SNIPPET_CHARS)
                 results.append(f"{title}\n{url}\n{snippet}")
-                if len(results) >= 5:
+                if len(results) >= MAX_SEARCH_RESULTS:
                     break
-            return "\n\n".join(results) if results else "No results found."
+            payload = "\n\n".join(results) if results else "No results found."
+            return _clamp(payload, MAX_TOOL_PAYLOAD_CHARS)
     except Exception as e:
         return f"Search failed: {e}"
 
@@ -181,7 +201,7 @@ async def _fetch_page(url: str) -> str:
             text = _TAG_RE.sub(" ", resp.text)
             text = unescape(text)
             text = re.sub(r"\s+", " ", text).strip()
-            return text[:4000] if len(text) > 4000 else text
+            return _clamp(text, MAX_FETCH_CHARS)
     except Exception as e:
         return f"Fetch failed: {e}"
 
@@ -346,18 +366,21 @@ class AudioSocketTransport(BaseTransport):
 async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     logger.info("New AudioSocket connection")
 
+    call_uuid = ""
     try:
         header = await reader.readexactly(3)
         msg_type = header[0]
         msg_len = struct.unpack(">H", header[1:3])[0]
         payload = await reader.readexactly(msg_len) if msg_len > 0 else b""
         if msg_type == MSG_UUID:
-            call_uuid = payload.decode("utf-8", errors="replace").strip("\x00")
+            call_uuid = parse_audiosocket_uuid(payload)
             logger.info(f"Call UUID: {call_uuid}")
     except Exception as e:
         logger.error(f"Failed to read UUID: {e}")
         writer.close()
         return
+
+    call_log = CallLog("librarian", call_uuid)
 
     transport = AudioSocketTransport(
         reader, writer,
@@ -398,17 +421,21 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         tools=TOOLS,
     )
     context_aggregator = llm.create_context_aggregator(context)
+    context_window = make_context_window_guard(context, max_messages=12)
+    assistant_logger = make_assistant_logger(call_log)
 
     async def on_web_search(params: FunctionCallParams):
         query = params.arguments.get("query", "")
         logger.info(f"Web search: {query}")
         result = await _web_search(query)
+        call_log.log_tool_call("web_search", params.arguments, result)
         await params.result_callback(result)
 
     async def on_fetch_page(params: FunctionCallParams):
         url = params.arguments.get("url", "")
         logger.info(f"Fetch page: {url}")
         result = await _fetch_page(url)
+        call_log.log_tool_call("fetch_page", params.arguments, result)
         await params.result_callback(result)
 
     llm.register_function("web_search", on_web_search)
@@ -417,8 +444,11 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     pipeline = Pipeline([
         transport.input(),
         stt,
+        make_transcript_logger(call_log),
+        context_window,
         context_aggregator.user(),
         llm,
+        assistant_logger,
         tts,
         transport.output(),
         context_aggregator.assistant(),
@@ -427,14 +457,22 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     task = PipelineTask(
         pipeline,
         params=PipelineParams(allow_interruptions=True, enable_metrics=False),
+        idle_timeout_secs=None,
     )
 
-    await task.queue_frames([TTSSpeakFrame("Hey, reading anything good?")])
+    greeting = "Hey, reading anything good?"
+    call_log.log_greeting(greeting)
+    await task.queue_frames([TTSSpeakFrame(greeting)])
 
     runner = PipelineRunner(handle_sigint=False)
-    await runner.run(task)
-
-    logger.info("Pipeline finished")
+    try:
+        await runner.run(task)
+    finally:
+        logger.info("Pipeline finished")
+        try:
+            call_log.finalize(context.messages)
+        except Exception as e:
+            logger.error(f"Call log finalize error: {e}")
     writer.close()
     try:
         await writer.wait_closed()

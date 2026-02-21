@@ -19,7 +19,17 @@ import os
 import struct
 import sys
 import time
+from pathlib import Path
 from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from call_id import parse_audiosocket_uuid
+from call_log import (
+    CallLog,
+    make_assistant_logger,
+    make_context_window_guard,
+    make_transcript_logger,
+)
 
 from loguru import logger
 
@@ -259,18 +269,21 @@ class AudioSocketTransport(BaseTransport):
 async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     logger.info("New AudioSocket connection")
 
+    call_uuid = ""
     try:
         header = await reader.readexactly(3)
         msg_type = header[0]
         msg_len = struct.unpack(">H", header[1:3])[0]
         payload = await reader.readexactly(msg_len) if msg_len > 0 else b""
         if msg_type == MSG_UUID:
-            call_uuid = payload.decode("utf-8", errors="replace").strip("\x00")
+            call_uuid = parse_audiosocket_uuid(payload)
             logger.info(f"Call UUID: {call_uuid}")
     except Exception as e:
         logger.error(f"Failed to read UUID: {e}")
         writer.close()
         return
+
+    call_log = CallLog("funfacts", call_uuid)
 
     transport = AudioSocketTransport(
         reader, writer,
@@ -310,12 +323,17 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         messages=[{"role": "system", "content": SYSTEM_PROMPT}],
     )
     context_aggregator = llm.create_context_aggregator(context)
+    context_window = make_context_window_guard(context, max_messages=12)
+    assistant_logger = make_assistant_logger(call_log)
 
     pipeline = Pipeline([
         transport.input(),
         stt,
+        make_transcript_logger(call_log),
+        context_window,
         context_aggregator.user(),
         llm,
+        assistant_logger,
         tts,
         transport.output(),
         context_aggregator.assistant(),
@@ -324,20 +342,25 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     task = PipelineTask(
         pipeline,
         params=PipelineParams(allow_interruptions=True, enable_metrics=False),
+        idle_timeout_secs=None,
     )
 
     # Trigger LLM to generate a random opening fact each call
     await task.queue_frames([LLMMessagesFrame(
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": "Hit me with something good."},
         ]
     )])
 
     runner = PipelineRunner(handle_sigint=False)
-    await runner.run(task)
-
-    logger.info("Pipeline finished")
+    try:
+        await runner.run(task)
+    finally:
+        logger.info("Pipeline finished")
+        try:
+            call_log.finalize(context.messages)
+        except Exception as e:
+            logger.error(f"Call log finalize error: {e}")
     writer.close()
     try:
         await writer.wait_closed()
