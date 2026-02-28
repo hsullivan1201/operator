@@ -44,7 +44,7 @@ Key details:
 |-------|------|---------|
 | 1xx | Utility | 101 hello world, 102 echo test, 103 DTMF test, 104 music on hold, 105 congrats |
 | 2xx | AI Agents | 200 chef, 201 fun facts, 202 librarian, 203 French tutor, 204 daily briefing, 205 DJ Cool |
-| 7xx | Radio | 19 stations (KEXP, WFMU, NPR, WNYC, etc.) |
+| 7xx | Radio | 20 stations (KEXP, WFMU, NPR, WNYC, Mix Franco, etc.) |
 
 While listening to radio: press 4 for now-playing info, 5 for room speakers, 6 to turn them off.
 

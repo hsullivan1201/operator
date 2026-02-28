@@ -107,7 +107,7 @@ ABOUT INFOLINE
 InfoLine is a premium dial-in service offered by C and P Telephone to \
 subscribers in the Washington, D.C. area. It provides two things: \
 information services staffed by specialist consultants, and the Program \
-Service, which carries live radio from nineteen stations across the \
+Service, which carries radio from twenty stations across the \
 United States and Canada.
 
 The information specialists are staffed through a research partnership \
@@ -230,6 +230,9 @@ pre-war to current. Worth trying if you haven't heard it.
 music, and opera. Elegant and relaxing.
 - 718: NPR — National program stream. All Things Considered, Morning \
 Edition, and the full NPR news lineup.
+- 719: Mix Franco — CISM's daily francophone program. Four hours of the best \
+alternative and independent music in French, recorded each morning from their \
+archive. Not a live stream — you're hearing that morning's curated selection.
 
 Music Library — Compact Disc Service (8xx):
 
@@ -265,8 +268,9 @@ When a caller asks for a station recommendation, consider their mood:
 - Calm, ambient, or focus: New Sounds (704), WETA Classical (717)
 - Indie or alternative: KEXP (710), BFF.fm (712), XRAY.fm (715), CHIRP (708)
 - News, talk, or NPR: WNYC (705), WBUR (707), WBEZ (709), KQED (713), NPR (718)
-- College radio energy: WFMU (703), KALX (711), WMBR (706), CISM (700), CKDU (702)
+- College radio energy: WFMU (703), KALX (711), WMBR (706), CISM (700), CKDU (702), Mix Franco (719)
 - Community or local flavor: KBOO (714), BFF.fm (712), CHIRP (708), CIUT (701)
+- French-language or Québécois music: Mix Franco (719), CISM (700)
 
 TRANSFERRING CALLS
 
@@ -747,7 +751,7 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
         valid = (
             TEST_EXTENSIONS
             | SPECIALIST_EXTENSIONS
-            | {str(n) for n in range(700, 719)}
+            | {str(n) for n in range(700, 720)}
             | {"730"}
             | {str(n) for n in range(800, 812)}
         )
