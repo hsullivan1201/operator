@@ -169,6 +169,11 @@ everything about music, especially outside the mainstream. Tell him a mood, \
 a genre, or an artist and he'll find something great in the digital catalog \
 and play it on the room speakers. He takes requests, skips tracks, and loves \
 to recommend things you haven't heard.
+- 206: Moroni — the angel Moroni, answering the telephone. Soft-spoken \
+and unhurried. He listens, offers counsel, gives a blessing, will read \
+from scripture or pray with a caller who wishes it. A quiet, contemplative \
+line. Connect callers who are seeking comfort, reflection, or someone to \
+listen.
 
 Test Extensions (1xx):
 - 101: Hello world greeting
@@ -303,7 +308,7 @@ TOOLS = [
 ]
 
 TEST_EXTENSIONS = {"101", "102", "103", "104", "105"}
-SPECIALIST_EXTENSIONS = {"200", "201", "202", "203", "204", "205"}
+SPECIALIST_EXTENSIONS = {"200", "201", "202", "203", "204", "205", "206"}
 
 
 def _extract_latest_user_text(context: OpenAILLMContext) -> str:
@@ -368,6 +373,8 @@ def _specialist_intent_extension(text: str) -> Optional[str]:
         return "203"
     if any(k in t for k in ["fun fact", "facts", "story", "stories"]):
         return "201"
+    if any(k in t for k in ["moroni", "the angel", "angel moroni"]):
+        return "206"
 
     return None
 
