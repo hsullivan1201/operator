@@ -174,6 +174,9 @@ and unhurried. He listens, offers counsel, gives a blessing, will read \
 from scripture or pray with a caller who wishes it. A quiet, contemplative \
 line. Connect callers who are seeking comfort, reflection, or someone to \
 listen.
+- 207: Companionship — a friendly voice for anyone who'd just like someone \
+to talk to. Press through for a warm welcome and good company. Lovely for \
+callers who mention being lonely, or who simply don't want to hang up yet.
 
 Test Extensions (1xx):
 - 101: Hello world greeting
@@ -308,7 +311,7 @@ TOOLS = [
 ]
 
 TEST_EXTENSIONS = {"101", "102", "103", "104", "105"}
-SPECIALIST_EXTENSIONS = {"200", "201", "202", "203", "204", "205", "206"}
+SPECIALIST_EXTENSIONS = {"200", "201", "202", "203", "204", "205", "206", "207"}
 
 
 def _extract_latest_user_text(context: OpenAILLMContext) -> str:
@@ -375,6 +378,8 @@ def _specialist_intent_extension(text: str) -> Optional[str]:
         return "201"
     if any(k in t for k in ["moroni", "the angel", "angel moroni"]):
         return "206"
+    if any(k in t for k in ["companionship", "companion", "lonely", "friendly voice", "someone to talk to", "just talk"]):
+        return "207"
 
     return None
 

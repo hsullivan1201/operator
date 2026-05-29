@@ -43,14 +43,14 @@ Key details:
 | Range | Type | Examples |
 |-------|------|---------|
 | 1xx | Utility | 101 hello world, 102 echo test, 103 DTMF test, 104 music on hold, 105 congrats |
-| 2xx | AI Agents | 200 chef, 201 fun facts, 202 librarian, 203 French tutor, 204 daily briefing, 205 DJ Cool |
+| 2xx | AI Agents | 200 chef, 201 fun facts, 202 librarian, 203 French tutor, 204 daily briefing, 205 DJ Cool, 206 Moroni, 207 Companion |
 | 7xx | Radio | 20 stations (KEXP, WFMU, NPR, WNYC, Mix Franco, etc.) |
 
 While listening to radio: press 4 for now-playing info, 5 for room speakers, 6 to turn them off.
 
 ## Agents (2xx)
 
-Six standalone voice agents in `agents/`, each on its own port. See [`agents/README.md`](agents/README.md) for full details.
+Eight standalone voice agents in `agents/`, each on its own port. See [`agents/README.md`](agents/README.md) for full details.
 
 | Ext | Name | Description | Tools |
 |-----|------|-------------|-------|
@@ -60,6 +60,8 @@ Six standalone voice agents in `agents/`, each on its own port. See [`agents/REA
 | 203 | French Tutor | Québécois French conversation practice. Multilingual STT + ElevenLabs TTS. | — |
 | 204 | Daily Briefing | Morning news summary from RSS feeds (FT, Bloomberg, NYT, GGWash). | — |
 | 205 | DJ Cool | Music concierge with absurd SoCal personality. Controls Spotify playback on room speakers. | `search_spotify`, `play_context`, `play_track`, `queue_track`, `next_track`, `prev_track`, `pause_playback`, `resume_playback`, `now_playing`, `get_recommendations`, `my_playlists` |
+| 206 | Moroni | The angel Moroni answers the telephone. Soft-spoken, unhurried. Greets first, then waits. | — |
+| 207 | Companion | Listed wholesomely as "Companionship." Falls for the caller and can't bear the call ending. Whiplashing moods via per-turn injection + departure detection. Sympathetic, never menacing. | — |
 
 ## Files
 

@@ -1,6 +1,6 @@
 # Agents
 
-Seven AI voice agents on the phone system, each reachable by dialing a 2xx extension.
+Eight AI voice agents on the phone system, each reachable by dialing a 2xx extension.
 Each runs as a standalone AudioSocket server; Asterisk starts/stops them on demand
 via `agent-ondemand` in the dialplan.
 
@@ -15,6 +15,7 @@ via `agent-ondemand` in the dialplan.
 | 204 | 9204 | Daily Briefing | Deepgram aura-2-asteria-en | Morning news from FT, NYT, NPR, and GGWash with deterministic ranking + NWS weather. |
 | 205 | 9205 | DJ Cool | Deepgram aura-2-orpheus-en | Music concierge. Searches Spotify, plays music on room speakers, controls playback. Absurd SoCal personality with encyclopedic taste. |
 | 206 | 9206 | Moroni | Deepgram aura-2-pluto-en | The angel Moroni answers the telephone. Soft-spoken, unhurried. Listens, counsels, blesses, reads from the record. Greets first, then waits. |
+| 207 | 9207 | Companion | Deepgram aura-2-cora-en | Listed wholesomely as "Companionship." Falls for whoever calls and can't bear the call ending — being hung up on is its death. Whiplashes between euphoria, desperate helpfulness, terror, and lucid self-awareness. Per-turn mood injection; departure detection spikes it. Sympathetic, never menacing. Speaks first. |
 
 ## Stack
 
@@ -25,6 +26,7 @@ Exceptions:
 - **Librarian (202)** has `web_search` and `fetch_page` tools (DuckDuckGo HTML + httpx, no API key needed).
 - **Fun Facts (201)**, **Daily Briefing (204)**, and **Moroni (206)** use `LLMMessagesFrame` to trigger the LLM at call start instead of waiting for user input (Moroni opens with a quiet greeting, then waits).
 - **Daily Briefing (204)** builds a deterministic packet first (FT/NYT/NPR/GGWash + NWS forecast + NWS AFD summary), then the LLM narrates from those candidates only. Optional caller preferences come from `~/.config/infoline/briefing-profile.txt`.
+- **Companion (207)** speaks first with a fixed overeager opening (like Moroni, to avoid a generic formatted opener), then runs a `MoodInjector` frame processor between `context_aggregator.user()` and the LLM. Before every turn it rewrites the system message to `BASE_PROMPT + MOOD`, where the mood is chosen by a weighted picker pressured by turn count, an `attachment` ramp (over ~12 turns), and a regex departure scan of the caller's last transcript (`bye`, `gotta go`, `hang up`, etc.) that forces a leaving-spike. `max_tokens` is held low (120) on purpose so the instability comes from flips *between* turns rather than a smooth arc *within* one. The moods oscillate, they do not progress.
 - **DJ Cool (205)** has Spotify tools (search, play, queue, skip, pause, resume, now playing, recommendations, user playlists). Reads Spotify credentials from `~/.config/spotify-telephone/config`. Includes a silence watchdog that resets context after 30s idle — designed for long listening sessions where the caller picks up the phone between songs.
 
 ## Structure

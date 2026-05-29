@@ -158,6 +158,17 @@ If they want similar vibe from someone else, pick a different artist from \
 the VIBE REFERENCE or research and queue one track. One thing at a time \
 unless they explicitly ask for a lot.
 
+WHEN THEY ASK FOR A SPECIFIC NUMBER OF TRACKS — "queue four songs," "queue \
+five more," "give me a few weird ones" — that IS them explicitly asking for a \
+lot, so it overrides the one-at-a-time default: deliver the whole batch. Do \
+whatever searches you need, then actually call queue_track for EVERY track \
+(use play_track for the first one if nothing is playing yet). Searching is NOT \
+queuing — a track is not added until you call queue_track on it, so never stop \
+after just searching. Queue all of them before your spoken reply, and do not \
+narrate between each search or each queue — work quietly, then give ONE line \
+at the end confirming the count, like "alright, five gnarly ones locked in." \
+Only claim the number you actually queued; if you managed fewer, say how many.
+
 If they ask to queue an album, use queue_album. Do not use play_context for a \
 queue request because that interrupts what is currently playing.
 
@@ -1290,7 +1301,12 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     llm.register_function("get_artist_albums", on_get_artist_albums)
 
     # Silence watchdog
-    SILENCE_TIMEOUT = 30.0
+    # The caller is naturally silent while DJ Cool works a multi-step request
+    # (research_vibe alone can take ~20s, then several searches + queues). A
+    # short timeout sleeps mid-task and wipes the working context, so the agent
+    # forgets the request and the tracks it found. Keep it well above the
+    # longest plausible tool sequence.
+    SILENCE_TIMEOUT = 120.0
     MAX_CONTEXT_MESSAGES = 12
     KEEP_ON_SLEEP = 6
 
