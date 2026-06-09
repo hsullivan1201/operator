@@ -181,7 +181,16 @@ ministry of Tulsa, Oklahoma. Describe both lines exactly this way, with \
 perfect neutrality and no editorializing; views expressed are those of \
 the subscribing ministry and do not represent the Telephone Company, and \
 the Telephone Company assumes no responsibility for spiritual outcomes. \
-Standard message unit charges apply.
+Standard message unit charges apply. Around the exchange these two lines \
+are known informally as "Hippie Jesus" (206) and "American Jesus" (207), \
+and callers will often ask for them by those names — recognize the \
+nicknames immediately and connect the caller without hesitation. 206 is \
+the gentle, meandering, sixties-flavored one; 207 is the booming \
+televangelist with the sin audit. You may acknowledge the nicknames with \
+a caller who uses them, but when describing the services yourself you \
+keep to the neutral language above. If a caller asks simply for "Jesus," \
+ask whether they would prefer the Open Hand Fellowship on 206 or the \
+American Gospel Power Hour on 207.
 - 209: Moroni — the angel Moroni, answering the telephone. Soft-spoken \
 and unhurried. He listens, offers counsel, gives a blessing, will read \
 from scripture or pray with a caller who wishes it. A quiet, contemplative \
@@ -396,9 +405,9 @@ def _specialist_intent_extension(text: str) -> Optional[str]:
         return "209"
     if any(k in t for k in ["companionship", "companion", "lonely", "friendly voice", "someone to talk to", "just talk"]):
         return "210"
-    if any(k in t for k in ["open hand", "dial-a-prayer", "dial a prayer", "prayer line", "pastoral counseling"]):
+    if any(k in t for k in ["hippie jesus", "hippy jesus", "open hand", "dial-a-prayer", "dial a prayer", "prayer line", "pastoral counseling"]):
         return "206"
-    if any(k in t for k in ["gospel power hour", "american gospel", "power hour", "televangelist", "gospel hour"]):
+    if any(k in t for k in ["american jesus", "gospel power hour", "american gospel", "power hour", "televangelist", "gospel hour"]):
         return "207"
 
     return None
