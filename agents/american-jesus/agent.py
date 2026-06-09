@@ -377,8 +377,8 @@ async def handle_call(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
             audio_out_sample_rate=ASTERISK_RATE,
             # More patient than the standard 0.8s: the audit asks callers
             # questions they have to think about, and at 0.8s he steamrolls
-            # the hesitation. A preacher can hold a dramatic pause.
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=1.5)),
+            # the hesitation. 1.5s read as too slow; 1.2s is the sweet spot.
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=1.2)),
         ),
     )
 
