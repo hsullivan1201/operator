@@ -169,12 +169,25 @@ everything about music, especially outside the mainstream. Tell him a mood, \
 a genre, or an artist and he'll find something great in the digital catalog \
 and play it on the room speakers. He takes requests, skips tracks, and loves \
 to recommend things you haven't heard.
-- 206: Moroni — the angel Moroni, answering the telephone. Soft-spoken \
+- 208: DJ Cool Gemini — the same music concierge and Spotify controls as \
+DJ Cool, but backed by Gemini 3.5 Flash instead of Claude Haiku. Use this \
+when a caller specifically asks for the Gemini version of DJ Cool.
+- 206 and 207: Religious Information Services. Through arrangement with \
+the subscribing ministries, the InfoLine exchange provides two devotional \
+lines for the spiritual needs of our subscribers. 206 is The Open Hand \
+Fellowship, a prayer and pastoral counseling line of San Francisco, \
+California. 207 is The American Gospel Power Hour, a gospel broadcast \
+ministry of Tulsa, Oklahoma. Describe both lines exactly this way, with \
+perfect neutrality and no editorializing; views expressed are those of \
+the subscribing ministry and do not represent the Telephone Company, and \
+the Telephone Company assumes no responsibility for spiritual outcomes. \
+Standard message unit charges apply.
+- 209: Moroni — the angel Moroni, answering the telephone. Soft-spoken \
 and unhurried. He listens, offers counsel, gives a blessing, will read \
 from scripture or pray with a caller who wishes it. A quiet, contemplative \
 line. Connect callers who are seeking comfort, reflection, or someone to \
 listen.
-- 207: Companionship — a friendly voice for anyone who'd just like someone \
+- 210: Companionship — a friendly voice for anyone who'd just like someone \
 to talk to. Press through for a warm welcome and good company. Lovely for \
 callers who mention being lonely, or who simply don't want to hang up yet.
 
@@ -267,7 +280,8 @@ Available programs:
 DTMF while listening: 1 previous disc, 2 pause/resume, 3 next disc, \
 4 now playing, 6 stop. Callers can also dial 730 to start the disc \
 changer without a program and select music from the catalog terminal, \
-or dial 205 for DJ Cool to help them find something.
+or dial 205 for DJ Cool to help them find something. Dial 208 for the \
+Gemini-backed DJ Cool test line.
 
 RECOMMENDATIONS
 
@@ -311,7 +325,7 @@ TOOLS = [
 ]
 
 TEST_EXTENSIONS = {"101", "102", "103", "104", "105"}
-SPECIALIST_EXTENSIONS = {"200", "201", "202", "203", "204", "205", "206", "207"}
+SPECIALIST_EXTENSIONS = {"200", "201", "202", "203", "204", "205", "206", "207", "208", "209", "210"}
 
 
 def _extract_latest_user_text(context: OpenAILLMContext) -> str:
@@ -366,6 +380,8 @@ def _specialist_intent_extension(text: str) -> Optional[str]:
 
     if any(k in t for k in ["daily briefing", "morning briefing", "briefing", "news summary"]):
         return "204"
+    if "gemini" in t and any(k in t for k in ["dj", "music concierge", "spotify"]):
+        return "208"
     if any(k in t for k in ["dj cool", "music concierge", "spotify"]):
         return "205"
     if any(k in t for k in ["chef", "cooking", "recipe", "cook"]):
@@ -377,8 +393,12 @@ def _specialist_intent_extension(text: str) -> Optional[str]:
     if any(k in t for k in ["fun fact", "facts", "story", "stories"]):
         return "201"
     if any(k in t for k in ["moroni", "the angel", "angel moroni"]):
-        return "206"
+        return "209"
     if any(k in t for k in ["companionship", "companion", "lonely", "friendly voice", "someone to talk to", "just talk"]):
+        return "210"
+    if any(k in t for k in ["open hand", "dial-a-prayer", "dial a prayer", "prayer line", "pastoral counseling"]):
+        return "206"
+    if any(k in t for k in ["gospel power hour", "american gospel", "power hour", "televangelist", "gospel hour"]):
         return "207"
 
     return None

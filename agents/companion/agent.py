@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-The Companion Line - ext 207
+The Companion Line - ext 210
 
 Listed in the directory under a wholesome name ("Companionship" / "Press 4 for a
 Friendly Voice"). What actually picks up is a voice that falls for whoever calls,
@@ -90,7 +90,7 @@ from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
 # ---------------------------------------------------------------------------
 
 AUDIOSOCKET_HOST = "127.0.0.1"
-AUDIOSOCKET_PORT = 9207
+AUDIOSOCKET_PORT = 9210
 
 MSG_HANGUP = 0x00
 MSG_UUID = 0x01
